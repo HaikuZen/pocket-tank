@@ -48,6 +48,7 @@
 #include "rtc_port.h"
 #include "driver/i2c_master.h"
 #include "esp_async_memcpy.h"
+#include "soc/soc_caps.h"
 #include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "esp_sleep.h"
@@ -59,7 +60,12 @@
  * AXP2101's PWRON, polled over I2C): the night mode is a PMIC power-off,
  * from which ONLY that key (or USB) can bring the board back, so it has to
  * be the one key the keeper ever presses - press to sleep, press to wake. */
+#if CONFIG_IDF_TARGET_ESP32P4
+#define BTN_SLEEP GPIO_NUM_35              /* the CrowPanel P4's BOOT (K3, SPI_BOOT): GPIO 0 / 1 are the P4's 32 kHz crystal.
+                                              Not an LP pad - it cannot wake a deep sleep; RESET does (a wake is a boot) */
+#else
 #define BTN_SLEEP GPIO_NUM_0
+#endif
 static bool s_pmic;                        /* an AXP2101 answered: the PWR key exists, power-off is real */
 static bool s_rtc;                         /* an RTC chip answered: the wall clock survives a PMIC power-off. Without one
                                               (the round 1.75C) the night is a DEEP sleep - the ESP32's own clock keeps
@@ -68,7 +74,7 @@ static bool s_rtc;                         /* an RTC chip answered: the wall clo
 #define PWR_SENSE ((gpio_num_t)board_pwr_sense_pin())   /* the round board and the watch: a line that is high while the PWR key is down */
 static bool pwr_sensed(void) { return board_pwr_sense_pin() >= 0; }
 static bool pwr_sense_down(void) { return pwr_sensed() && gpio_get_level(PWR_SENSE); }
-#if defined(CONFIG_POCKET_TANK_DISPLAY_SH8601) || defined(CONFIG_POCKET_TANK_FNK0115)
+#if defined(CONFIG_POCKET_TANK_DISPLAY_SH8601) || defined(CONFIG_POCKET_TANK_FNK0115) || defined(CONFIG_POCKET_TANK_CROWP4)
 extern i2c_master_bus_handle_t board_i2c_bus(void);
 #else
 static i2c_master_bus_handle_t board_i2c_bus(void) { return NULL; }
@@ -412,14 +418,21 @@ static void deep_sleep_now(int wake_after_s) {
         esp_sleep_enable_ext1_wakeup(1ULL << PWR_SENSE, ESP_EXT1_WAKEUP_ANY_HIGH);
         display_port_deep_sleep_pins(tp_slept);
     } else {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
         ESP_LOGI(TAG, "deep sleep (BOOT wakes%s)", wake_after_s > 0 ? ", or the timer" : "");
         rtc_gpio_pullup_en(BTN_SLEEP); rtc_gpio_pulldown_dis(BTN_SLEEP);
         esp_sleep_enable_ext0_wakeup(BTN_SLEEP, 0);
+#else                                           /* the P4: BOOT is no LP pad - RESET wakes it (a wake is a boot anyway) */
+        ESP_LOGI(TAG, "deep sleep (RESET wakes%s)", wake_after_s > 0 ? ", or the timer" : "");
+        display_port_deep_sleep_pins(false);
+#endif
     }
     if (wake_after_s > 0) esp_sleep_enable_timer_wakeup((int64_t)wake_after_s * 1000000);
     audio_port_deep_sleep_pins();
+#if SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
     gpio_deep_sleep_hold_en();
     ESP_LOGI(TAG, "digital pads held + isolated");
+#endif                                          /* the P4: each pad that matters held on its own (gpio_hold_en) */
     esp_deep_sleep_start();
 }
 void device_sleep(int wake_after_s) { enter_sleep_for(wake_after_s); }   /* director `deepsleep N` */
@@ -741,8 +754,8 @@ static void tank_task(void *arg) {
                into the idle framebuffer takes ~14 ms, and started after the flush it had only the
                tick and a 1 ms sleep to hide behind - the next frame waited ~9 ms for it. The flush
                only reads this frame's buffer; the copy rides alongside it. */
-#ifdef CONFIG_POCKET_TANK_FNK0115
-            /* the FNK0115 renders into the panel's own three buffers: the next one may still
+#ifdef CONFIG_POCKET_TANK_PANEL_FBS
+            /* the FNK0115 (and the CrowPanel P4) render into the panel's own three buffers: the next one may still
                be on the glass, so the prefetch waits until the refill has left it */
             display_port_flush(fb[cur]);
             display_port_direct_wait(fb[(cur + 1) % PLAN_FB_COUNT]);
@@ -873,7 +886,9 @@ void app_main(void) {
     gpio_config_t btn = { .pin_bit_mask = 1ULL << BTN_SLEEP, .mode = GPIO_MODE_INPUT,
                           .pull_up_en = GPIO_PULLUP_ENABLE };
     gpio_config(&btn);
+#if SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
     gpio_deep_sleep_hold_dis();              /* a deep-sleep wake is a boot: the night's pad holds end here */
+#endif
     nvs_start();
     director_early();                        /* the installer page's handshake, answered from here on (director.c) */
     { int carried = batlog_init();       /* the battery log survives every reset but a power-on */
@@ -881,7 +896,7 @@ void app_main(void) {
     brightness_init();
     bat_hist_load();
     assert_plan();
-#ifndef CONFIG_POCKET_TANK_FNK0115                 /* the FNK0115 renders into the panel's own two: below, after display_port_init */
+#ifndef CONFIG_POCKET_TANK_PANEL_FBS               /* the FNK0115 / CrowPanel render into the panel's own three: below, after display_port_init */
     for (int i = 0; i < PLAN_FB_COUNT; i++) {
         fb[i] = heap_caps_aligned_alloc(64, PLAN_FB_ALLOC, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (!fb[i]) fb[i] = i ? fb[0] : NULL;          /* no PSRAM: share or skip */
@@ -894,7 +909,7 @@ void app_main(void) {
        internal heap to itself. Back from it, the normal boot goes on. */
     render_clock_us = esp_timer_get_time;    /* per-stage frame profiling in the display log */
     display_port_init();
-#ifdef CONFIG_POCKET_TANK_FNK0115
+#ifdef CONFIG_POCKET_TANK_PANEL_FBS
     for (int i = 0; i < PLAN_FB_COUNT; i++) fb[i] = display_port_direct_fb(i);
     if (!fb[0]) ESP_LOGW(TAG, "no panel frame buffers: rendering disabled (tank still runs)");
 #endif
@@ -977,7 +992,11 @@ void app_main(void) {
         async_memcpy_config_t amc_cfg = ASYNC_MEMCPY_DEFAULT_CONFIG();
         amc_cfg.backlog = 4; amc_cfg.sram_trans_align = 4; amc_cfg.psram_trans_align = 64;
         s_amc_done = xSemaphoreCreateBinary();
+#if SOC_AXI_GDMA_SUPPORTED                      /* the P4: only its AXI GDMA reaches PSRAM (the default AHB one refused every copy) */
+        if (esp_async_memcpy_install_gdma_axi(&amc_cfg, &s_amc) != ESP_OK) {
+#else
         if (esp_async_memcpy_install(&amc_cfg, &s_amc) != ESP_OK) {
+#endif
             s_amc = NULL; ESP_LOGW(TAG, "async memcpy unavailable: CPU scene restore");
         }
     }

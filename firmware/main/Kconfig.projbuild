@@ -2,7 +2,7 @@ menu "pocket-tank"
     config POCKET_TANK_DISPLAY_SH8601
         bool "Drive the Waveshare 1.8in AMOLED (SH8601 / CO5300 over QSPI)"
         default n
-        depends on !POCKET_TANK_FNK0115
+        depends on !POCKET_TANK_FNK0115 && !POCKET_TANK_CROWP4
         help
             Enable for the real board. Off = stub display port (QEMU / compile-only).
     config POCKET_TANK_ROUND
@@ -39,15 +39,40 @@ menu "pocket-tank"
             XPT2046 touch) are not supported. Build it with
             SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.fnk0115" into
             its own build directory and sdkconfig (docs/board-fnk0115.md).
+    config POCKET_TANK_CROWP4
+        bool "The CrowPanel P4 build: a 1024x600 tank for the Elecrow CrowPanel Advanced 7in / 10.1in (ESP32-P4)"
+        default n
+        depends on IDF_TARGET_ESP32P4 && !POCKET_TANK_ROUND && !POCKET_TANK_WATCH && !POCKET_TANK_FNK0115
+        help
+            On = TANK_WIDE + TANK_WIDE_1024: a 1024x600 landscape tank on the
+            board's EK79007 MIPI-DSI panel (display_port_dsi.c), GT911 touch,
+            the director on UART0 (the board's CH340). Wi-Fi is the onboard
+            ESP32-C6 over SDIO (esp_hosted + esp_wifi_remote). No PMIC, IMU or
+            RTC chip. Build it with
+            SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.crowp4" into its
+            own build directory and sdkconfig (docs/board-crowpanel-p4.md).
+    config POCKET_TANK_PANEL_FBS
+        bool
+        default y if POCKET_TANK_FNK0115 || POCKET_TANK_CROWP4
+        help
+            The tank renders straight into the display driver's own frame
+            buffers (display_port_direct_fb) instead of its own two.
+    config POCKET_TANK_CONSOLE_UART0
+        bool
+        default y if POCKET_TANK_FNK0115 || POCKET_TANK_CROWP4
+        help
+            The director's console is UART0 (a USB-UART bridge on the board),
+            not the chip's USB Serial/JTAG.
     config POCKET_TANK_TOUCH_FT3168
         bool "Read the FT3168 capacitive touch (taps / holds)"
         default n
     config POCKET_TANK_AUDIO_ES8311
         bool "Play the sound bank through the ES8311 codec + NS4150B amp (I2S)"
         default n
-        depends on !POCKET_TANK_FNK0115
+        depends on !POCKET_TANK_FNK0115 && !POCKET_TANK_CROWP4
         help
-            Enable for the real board (docs/AUDIO.md). Off = stub audio port: cues compile, nothing plays.
+            Enable for the real board (docs/AUDIO.md). The CrowPanel P4 build
+            plays through the same port without it (plain I2S, no codec). Off = stub audio port: cues compile, nothing plays.
     config POCKET_TANK_NO_PIE
         bool "Disable the PIE SIMD inference kernel (scalar dot products)"
         default n

@@ -2,17 +2,19 @@ set(SRCS main.c director.c brightness.c batlog.c codec_port.c advisor_llm_esp.c 
          update_mode.c net_port_esp.c model_trailer.c)
 if(CONFIG_POCKET_TANK_FNK0115)                 # the Freenove FNK0115's RGB panel (its I2C bus too)
     list(APPEND SRCS display_port_rgb.c)
+elseif(CONFIG_POCKET_TANK_CROWP4)              # the CrowPanel P4's MIPI-DSI panel (its I2C bus too)
+    list(APPEND SRCS display_port_dsi.c)
 elseif(CONFIG_POCKET_TANK_DISPLAY_SH8601)
     list(APPEND SRCS display_port_sh8601.c)
 else()
     list(APPEND SRCS display_port_stub.c)
 endif()
-if(CONFIG_POCKET_TANK_TOUCH_FT3168 OR CONFIG_POCKET_TANK_FNK0115)   # every board's glass, the FNK0115's GT911 among them
+if(CONFIG_POCKET_TANK_TOUCH_FT3168 OR CONFIG_POCKET_TANK_FNK0115 OR CONFIG_POCKET_TANK_CROWP4)   # every board's glass, the GT911s among them
     list(APPEND SRCS touch_port_ft3168.c)
 else()
     list(APPEND SRCS touch_port_stub.c)
 endif()
-if(CONFIG_POCKET_TANK_AUDIO_ES8311)
+if(CONFIG_POCKET_TANK_AUDIO_ES8311 OR CONFIG_POCKET_TANK_CROWP4)   # the CrowPanel: the same player, plain I2S, no codec
     list(APPEND SRCS audio_port_es8311.c)
 else()
     list(APPEND SRCS audio_port_stub.c)

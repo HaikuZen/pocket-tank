@@ -31,9 +31,11 @@ ota/
 sim/build-round/
 sim/build-watch/
 sim/build-wide/
+sim/build-wide1024/
 sim/fishsim-round
 sim/fishsim-watch
 sim/fishsim-wide
+sim/fishsim-wide1024
 # tools/board_sheet.py: the three glasses side by side
 sim/sheets/
 

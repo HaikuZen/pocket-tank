@@ -267,7 +267,8 @@ static int selftest_spawn(void) {
     if (t_born < 0) { printf("FAIL: no fry within 2 min of the staging\n"); return 1; }
     if (t_spawn < SPAWN_WAIT_MIN_S - DT || t_spawn > SPAWN_WAIT_MAX_S + DT) { printf("FAIL: the courtship started at %.1f s, not %.0f..%.0f\n", t_spawn, SPAWN_WAIT_MIN_S, SPAWN_WAIT_MAX_S); return 1; }
     if (t_in < 0 || t_in > 30) { printf("FAIL: the pair was not courting in the grass within 30 s (%.1f)\n", t_in); return 1; }
-    if (t_born - t_in < SPAWN_DANCE_S - DT) { printf("FAIL: the fry came %.1f s into the dance, before SPAWN_DANCE_S\n", t_born - t_in); return 1; }
+    if (t_born - t_in < SPAWN_DANCE_S - 2 * DT) { printf("FAIL: the fry came %.1f s into the dance, before SPAWN_DANCE_S\n", t_born - t_in); return 1; }   /* 2 frames: t_in is a
+                                                  frame into the dance, and 600 float sixtieths may make 10 s a frame early (the 1024 x 600 tank's seed, 2026-10-15) */
     {
         const fish_t *f = &tank.fish[tank.n_fish - 1];
         int b = tank_nursery_bed(&tank); float x0, x1; tank_veg_bed(&tank, b, &x0, &x1, NULL, NULL);
@@ -375,7 +376,7 @@ static int selftest_pop(void) {
         tank_tick(&tank, 1.0f / 60.0f, advisor_rules);
         /* an attentive keeper: feeds often, rests a finger by a fish */
         bool tending = i % 3600 < 1800;
-        if (tending && i % 300 == 0) tank_feed(&tank, 150 + (i % 900) / 3, 2);
+        if (tending && i % 300 == 0) tank_feed(&tank, (int)TANK_FLOOR_X(150 + (i % 900) / 3), 2);   /* the 1.8's 150..450, on any floor */
         if (tending && i % 600 == 0) { hold_y = tank.fish[0].y;       /* across the tank, 80 px in from the glass at the fish's height */
                                            hold_x = tank.fish[0].x < TANK_W / 2 ? tank_glass_x1(hold_y) - 80 : tank_glass_x0(hold_y) + 80; }
         if (tending && i % 600 < 480) tank_touch_hold(&tank, hold_x, hold_y);   /* 8 s across the tank, 2 s off */
@@ -3602,7 +3603,9 @@ static int selftest_shop(void) {
             tank_veg_set(&tank, 0, 0.5f);
             f->goal.id = GOAL_EXPLORE; progression_tick(&tank, 1.0f / 60.0f);
             if (f->ms_bits & MS_FIRST_GRASS) { printf("FAIL: swimming through the grass earned the seagrass badge\n"); return 1; }
-            f->goal.id = GOAL_REST; f->goal_age = 5; f->y = TANK_BOT - 300;      /* resting, but above the canopy */
+            { float bx0, bx1, btop; int bn; tank_veg_bed(&tank, 0, &bx0, &bx1, &btop, &bn);   /* resting, but above the canopy: */
+              f->goal.id = GOAL_REST; f->goal_age = 5; f->y = btop - 40; }       /* its tallest frond's tip, on any board (it was TANK_BOT - 300:
+                                                                                     inside the 1024 x 600 tank's taller grass, 2026-10-15) */
             progression_tick(&tank, 1.0f / 60.0f);
             if (f->ms_bits & MS_FIRST_GRASS) { printf("FAIL: a rest above the canopy earned the seagrass badge\n"); return 1; }
             f->y = TANK_BOT - 30; progression_tick(&tank, 1.0f / 60.0f);

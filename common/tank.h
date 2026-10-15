@@ -29,7 +29,12 @@
 #define TANK_W 410
 #define TANK_H 502
 #endif
-#ifdef TANK_WIDE                /* the Freenove FNK0115 (2026-10-14): its 800 x 480 RGB panel, IPS 4.3" / 5", the whole
+#if defined(TANK_WIDE) && defined(TANK_WIDE_1024)
+                                /* the Elecrow CrowPanel Advanced 7" / 10.1" (ESP32-P4, 2026-10-15): their 1024 x 600 MIPI-DSI
+                                 * IPS panel - the wide tank again, a size up (TANK_WIDE_1024 rides on TANK_WIDE) */
+#define TANK_W 1024
+#define TANK_H 600
+#elif defined(TANK_WIDE)        /* the Freenove FNK0115 (2026-10-14): its 800 x 480 RGB panel, IPS 4.3" / 5", the whole
                                  * glass a plain rectangle - the 1.8's tank, wider and a little taller */
 #define TANK_W 800
 #define TANK_H 480
@@ -155,6 +160,11 @@ typedef enum { VEG_KIND_GRASS, VEG_KIND_SWORD } veg_kind_t;
 #define ALGAE_CELL 18
 #define ALGAE_COLS 23
 #define ALGAE_ROWS 28
+#elif defined(TANK_WIDE_1024)                  /* the CrowPanel 7" / 10.1": 32 x 19 cells of 32 px (1024 x 608: the last row hangs
+                                                * 8 px under the glass) - 608 cells, inside the 644 the save keeps */
+#define ALGAE_CELL 32
+#define ALGAE_COLS 32
+#define ALGAE_ROWS 19
 #elif defined(TANK_WIDE)                       /* the FNK0115: 32 x 20 cells of 25 px (800 x 500: the last row hangs
                                                 * 20 px under the glass) - 640 cells, inside the 644 the save keeps */
 #define ALGAE_CELL 25
@@ -173,6 +183,8 @@ typedef enum { VEG_KIND_GRASS, VEG_KIND_SWORD } veg_kind_t;
  * 1.8's pitch on every build (VEG_PAY_PX): the same cut, the same sand dollars. */
 #ifdef TANK_WATCH
 #define VEG_SEG_PX 4.3f
+#elif defined(TANK_WIDE_1024)                  /* 600 px of glass: 107 x 5.25 from the sand line (y 584), the tip at 22 */
+#define VEG_SEG_PX 5.25f
 #elif defined(TANK_WIDE)                       /* 480 px of glass, 112 more than the 1.8's 368 */
 #define VEG_SEG_PX 4.15f
 #else

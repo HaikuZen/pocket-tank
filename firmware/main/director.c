@@ -36,7 +36,7 @@ bool net_port_set_manifest_url(const char *url);
 /* the console's wire: the S3's own USB (Serial/JTAG) on the Waveshare boards;
  * on the FNK0115 (2026-10-14) GPIO 19 / 20 carry the touch's I2C, so it is
  * UART0, which the board's USB-UART bridge brings to its USB port */
-#if CONFIG_POCKET_TANK_FNK0115
+#if CONFIG_POCKET_TANK_CONSOLE_UART0                /* the FNK0115, and the CrowPanel P4 (its CH340) */
 #include "driver/uart.h"
 #define CON_WIRE 1
 static bool con_install(void) {

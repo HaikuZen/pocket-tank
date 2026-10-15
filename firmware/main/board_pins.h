@@ -27,9 +27,14 @@
  *
  * The Freenove FNK0115 (2026-10-14) is not told apart at boot: it has its own
  * build (CONFIG_POCKET_TANK_FNK0115, TANK_WIDE) and its own display port,
- * display_port_rgb.c - its pins are at the foot of this file. */
+ * display_port_rgb.c - its pins are at the foot of this file.
+ *
+ * The Elecrow CrowPanel Advanced 7" / 10.1" V1.2 (ESP32-P4, 2026-10-15)
+ * likewise: its own build (CONFIG_POCKET_TANK_CROWP4, TANK_WIDE_1024) and
+ * display port, display_port_dsi.c. */
 #ifndef BOARD_PINS_H
 #define BOARD_PINS_H
+#include "sdkconfig.h"
 #define PIN_LCD_CS        12
 #define PIN_LCD_PCLK      11
 #define PIN_LCD_DATA0     4
@@ -109,4 +114,44 @@
 #define F_PIN_TP_RST      38
 #define F_PANEL_W         800
 #define F_PANEL_H         480
+
+/* ---- the Elecrow CrowPanel Advanced 7" / 10.1", V1.2 (2026-10-15; its own build, TANK_WIDE_1024) ----
+ * An ESP32-P4 (rev 1.3, 32 MB PSRAM, 16 MB flash) with a 1024 x 600 IPS
+ * panel on 2-lane MIPI-DSI (EK79007), a GT911 on I2C, a PWM backlight, and an
+ * ESP32-C6 for Wi-Fi over SDIO (esp_hosted). The pins are the same on both
+ * sizes and on hardware V1.0 / V1.1 / V1.2; only the audio differs (the 7":
+ * the 7": two NS4168 on plain I2S; the 10.1" V1.2 schematic draws an ES8311 +
+ * an analog amp, but the bench 10.1" has no codec on its bus and Elecrow's
+ * firmware drives it as the 7": plain I2S, which is what this build plays). Sources: Elecrow's repos for both sizes
+ * (Eagle_SCH&PCB/1.2/readme.md, example/V1.2/idf-code Lesson05 / 07) and the
+ * factory firmware's boot log. The console is UART0 (GPIO 37 / 38) through the
+ * board's CH340; the P4's own USB is a separate port. */
+#define C_PIN_BL          31       /* LCD_BK_EN -> the MT9201 backlight driver, LEDC PWM */
+#define C_PIN_LCD_RST     41       /* wired, but Elecrow's driver never touches it (reset_gpio_num -1) */
+#define C_PIN_TP_SDA      45
+#define C_PIN_TP_SCL      46
+#define C_PIN_TP_RST      40
+#define C_PIN_TP_INT      42
+#define C_PIN_AMP_SD      30       /* the speaker amps' enable, ACTIVE LOW (10k pull-up): off until a cue plays */
+#define C_PIN_I2S_BCLK    22       /* plain I2S into the amps, no MCLK (audio_port_es8311.c) */
+#define C_PIN_I2S_WS      21
+#define C_PIN_I2S_DOUT    23
+#define C_PIN_C6_EN       32       /* the ESP32-C6's enable (esp_hosted resets the C6 with it) */
+#define C_LDO_DSI_PHY_CHAN 3       /* the P4's internal LDO3 at 2.5 V feeds the MIPI D-PHY */
+#define C_LDO_DSI_PHY_MV   2500
+#define C_PANEL_W         1024
+#define C_PANEL_H         600
+
+/* the GT911 boards (touch_port_ft3168.c): this build's pins and panel */
+#if CONFIG_POCKET_TANK_CROWP4
+#define GT_PIN_TP_RST     C_PIN_TP_RST
+#define GT_PIN_TP_INT     C_PIN_TP_INT
+#define GT_PANEL_W        C_PANEL_W
+#define GT_PANEL_H        C_PANEL_H
+#else
+#define GT_PIN_TP_RST     F_PIN_TP_RST
+#define GT_PIN_TP_INT     F_PIN_TP_INT
+#define GT_PANEL_W        F_PANEL_W
+#define GT_PANEL_H        F_PANEL_H
+#endif
 #endif

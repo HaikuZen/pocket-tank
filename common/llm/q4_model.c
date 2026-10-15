@@ -8,7 +8,8 @@
 #include <limits.h>
 
 /* On the ESP32-S3 the group dot product runs on the PIE 128-bit unit
- * (16 int8 MACs per ee.vmulas.s8.accx); everywhere else a scalar loop.
+ * (16 int8 MACs per ee.vmulas.s8.accx), on the ESP32-P4 on its own PIE
+ * (esp.vmulas.s8.xacc, 2026-10-15); everywhere else a scalar loop.
  * Both paths dot an UNPACKED int8 weight group against int8 activations —
  * the group is unpacked once and reused across every token of a batch.
  * Define POCKET_TANK_NO_PIE to force the scalar path (e.g. a QEMU build
@@ -210,6 +211,128 @@ static inline int32_t dot_q4pk_64(const uint8_t *wp, const int8_t *x) {
         "rur.accx_0 %[acc]\n"
         : [acc] "=r"(acc), [w] "+r"(wa), [x] "+r"(x), [mask] "+r"(mask), [eight] "+r"(eight)
         : [sh] "r"(shift)
+        : "memory");
+    return acc;
+}
+#define Q4_PK 1
+#elif defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(POCKET_TANK_NO_PIE)
+/* The ESP32-P4's PIE (RISC-V Xesppie, 2026-10-15): the S3's kernels above,
+ * step for step - the same 128-bit q registers, 16 int8 MACs per
+ * esp.vmulas.s8.xacc into the 40-bit XACC (its low 32 bits read back), the
+ * same SAR_BYTE funnel shift for the packed weights' 8-byte alignment. What
+ * differs: a PIE instruction names only x8..x15 (a0-a5 here, pinned as
+ * register variables: this gcc has no constraint for that class), so
+ * the many-token kernels store each sum through one scratch register instead
+ * of holding eight results; the 4-bit lane shift's amount comes from a
+ * register (esp.movx.w.sar); that shift is the logical esp.vsr.u32 (the
+ * S3's is arithmetic) - the nibble mask right after it makes them the same;
+ * and the nibble's -8 is a plain esp.vsub.s8 (0..15 - 8 cannot saturate).
+ * The boot self-check (dot_selfcheck) holds every kernel to plain C at both
+ * alignments; a mismatch refuses the model. */
+#define Q4_PIE 1
+#define P4_DOT64(xp) \
+    "esp.zero.xacc\n" \
+    "esp.vld.128.ip q4, %[" xp "], 16\n" \
+    "esp.vmulas.s8.xacc.ld.ip q5, %[" xp "], 16, q0, q4\n" \
+    "esp.vmulas.s8.xacc.ld.ip q4, %[" xp "], 16, q1, q5\n" \
+    "esp.vmulas.s8.xacc.ld.ip q5, %[" xp "], 16, q2, q4\n" \
+    "esp.vmulas.s8.xacc q3, q5\n"
+#define P4_LOADW \
+    "esp.vld.128.ip q0, %[w], 16\n" \
+    "esp.vld.128.ip q1, %[w], 16\n" \
+    "esp.vld.128.ip q2, %[w], 16\n" \
+    "esp.vld.128.ip q3, %[w], 16\n"
+#define P4_STORE(off) \
+    "esp.movx.r.xacc.l %[t]\n" \
+    "sw %[t], " off "(%[iv])\n"
+static inline int32_t dot_i8_64(const int8_t *w_, const int8_t *x_) {
+    register int32_t acc __asm__("a0");
+    register const int8_t *w __asm__("a1") = w_, *x __asm__("a2") = x_;
+    __asm__ volatile(
+        P4_LOADW
+        P4_DOT64("x")
+        "esp.movx.r.xacc.l %[acc]\n"
+        : [acc] "=r"(acc), [w] "+r"(w), [x] "+r"(x)
+        :
+        : "memory");
+    return acc;
+}
+/* four tokens against one weight group: the group loads into q0-q3 once and
+ * stays there for all four activation rows (stride apart) */
+static inline void dot4_i8_64(const int8_t *w_, const int8_t *x_, int stride, int32_t iv[4]) {
+    register const int8_t *w __asm__("a0") = w_, *x0 __asm__("a1") = x_, *x1 __asm__("a2") = x_ + stride,
+                          *x2 __asm__("a3") = x_ + 2 * stride, *x3 __asm__("a4") = x_ + 3 * stride;
+    register int32_t t __asm__("a5");
+    __asm__ volatile(
+        P4_LOADW
+        P4_DOT64("x0") P4_STORE("0")
+        P4_DOT64("x1") P4_STORE("4")
+        P4_DOT64("x2") P4_STORE("8")
+        P4_DOT64("x3") P4_STORE("12")
+        : [t] "=&r"(t), [w] "+r"(w), [x0] "+r"(x0), [x1] "+r"(x1), [x2] "+r"(x2), [x3] "+r"(x3)
+        : [iv] "r"(iv)
+        : "memory");
+}
+/* eight tokens per weight-group load: the four activation pointers each hop
+ * (4*stride - 64) after their first pass to cover tokens t+4..t+7 */
+static inline void dot8_i8_64(const int8_t *w_, const int8_t *x_, int stride, int32_t iv[8]) {
+    register const int8_t *w __asm__("a0") = w_, *x0 __asm__("a1") = x_, *x1 __asm__("a2") = x_ + stride,
+                          *x2 __asm__("a3") = x_ + 2 * stride, *x3 __asm__("a4") = x_ + 3 * stride;
+    register int32_t t __asm__("a5");
+    int hop = 4 * stride - 64;
+    __asm__ volatile(
+        P4_LOADW
+        P4_DOT64("x0") P4_STORE("0")  "add %[x0], %[x0], %[hop]\n"
+        P4_DOT64("x1") P4_STORE("4")  "add %[x1], %[x1], %[hop]\n"
+        P4_DOT64("x2") P4_STORE("8")  "add %[x2], %[x2], %[hop]\n"
+        P4_DOT64("x3") P4_STORE("12") "add %[x3], %[x3], %[hop]\n"
+        P4_DOT64("x0") P4_STORE("16")
+        P4_DOT64("x1") P4_STORE("20")
+        P4_DOT64("x2") P4_STORE("24")
+        P4_DOT64("x3") P4_STORE("28")
+        : [t] "=&r"(t), [w] "+r"(w), [x0] "+r"(x0), [x1] "+r"(x1), [x2] "+r"(x2), [x3] "+r"(x3)
+        : [iv] "r"(iv), [hop] "r"(hop)
+        : "memory");
+}
+/* single token, PACKED weights: as the S3's dot_q4pk_64 */
+static const int8_t q4pk_mask[16] __attribute__((aligned(16))) =
+    { 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15 };
+static const int8_t q4pk_eight[16] __attribute__((aligned(16))) =
+    { 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
+static inline int32_t dot_q4pk_64(const uint8_t *wp, const int8_t *x) {
+    register int32_t acc __asm__("a0");
+    register const int8_t *mask __asm__("a1") = q4pk_mask, *eight __asm__("a2") = q4pk_eight, *xr __asm__("a3") = x;
+    register const uint8_t *wa __asm__("a4") = (const uint8_t *)((uintptr_t)wp & ~(uintptr_t)15);
+    register uint32_t shift __asm__("a5") = (uint32_t)((uintptr_t)wp & 15), four __asm__("s1") = 4;
+    __asm__ volatile(
+        "esp.movx.w.sar %[four]\n"
+        "esp.movx.w.sar.bytes %[sh]\n"
+        "esp.vld.128.ip q6, %[mask], 0\n"
+        "esp.vld.128.ip q7, %[eight], 0\n"
+        "esp.vld.128.ip q0, %[w], 16\n"
+        "esp.vld.128.ip q1, %[w], 16\n"
+        "esp.vld.128.ip q2, %[w], 0\n"
+        "esp.src.q q0, q0, q1\n"
+        "esp.src.q q1, q1, q2\n"
+        "esp.andq q2, q0, q6\n"
+        "esp.andq q3, q1, q6\n"
+        "esp.vsub.s8 q2, q2, q7\n"
+        "esp.vsub.s8 q3, q3, q7\n"
+        "esp.vsr.u32 q4, q0\n"
+        "esp.vsr.u32 q5, q1\n"
+        "esp.andq q4, q4, q6\n"
+        "esp.andq q5, q5, q6\n"
+        "esp.vsub.s8 q4, q4, q7\n"
+        "esp.vsub.s8 q5, q5, q7\n"
+        "esp.zero.xacc\n"
+        "esp.vld.128.ip q0, %[x], 16\n"
+        "esp.vmulas.s8.xacc.ld.ip q1, %[x], 16, q2, q0\n"
+        "esp.vmulas.s8.xacc.ld.ip q0, %[x], 16, q3, q1\n"
+        "esp.vmulas.s8.xacc.ld.ip q1, %[x], 16, q4, q0\n"
+        "esp.vmulas.s8.xacc q5, q1\n"
+        "esp.movx.r.xacc.l %[acc]\n"
+        : [acc] "=r"(acc), [w] "+r"(wa), [x] "+r"(xr), [mask] "+r"(mask), [eight] "+r"(eight)
+        : [sh] "r"(shift), [four] "r"(four)
         : "memory");
     return acc;
 }

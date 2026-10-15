@@ -1,0 +1,42 @@
+# the CrowPanel P4 build (Elecrow CrowPanel Advanced 7" / 10.1", V1.2: ESP32-P4 + EK79007 MIPI-DSI + GT911 + ESP32-C6): on top of sdkconfig.defaults
+#   idf.py -B <dir> -DIDF_TARGET=esp32p4 -DSDKCONFIG=<dir>/sdkconfig -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.crowp4" build
+# The defaults' ESP32-S3 lines (octal PSRAM, 240 MHz, the S3's caches) have no
+# symbol on the P4 and are ignored; their P4 counterparts are here.
+CONFIG_IDF_TARGET="esp32p4"
+CONFIG_POCKET_TANK_CROWP4=y
+CONFIG_POCKET_TANK_DISPLAY_SH8601=n
+CONFIG_POCKET_TANK_AUDIO_ES8311=n
+# the chip on the bench (2026-10-15): ESP32-P4 rev v1.3 - 360 MHz is its ceiling (400 needs rev 3)
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+# 32 MB hex PSRAM at 200 MHz (esptool / the factory boot log); on IDF 5.4 200 MHz
+# is behind the experimental gate (20 MHz otherwise - the frame stream would starve)
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+CONFIG_SPIRAM_SPEED_200M=y
+# the console on UART0 (GPIO 37 / 38, the board's CH340); the P4's own USB is another port
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+# Wi-Fi is the onboard ESP32-C6 over 4-bit SDIO (esp_hosted, esp_wifi_remote):
+# CLK 18, CMD 19, D0..D3 17 / 16 / 15 / 14, the C6's enable on GPIO 32
+# (Elecrow's guide, and the factory firmware's own log)
+CONFIG_ESP_WIFI_REMOTE_LIBRARY_HOSTED=y
+CONFIG_SLAVE_IDF_TARGET_ESP32C6=y
+CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE=y
+CONFIG_ESP_HOSTED_SDIO_4_BIT_BUS=y
+# (slot 1, GPIO-matrixed: the pins are set through esp_hosted's PRIV_..._SLOT_1
+# symbols; its plain ESP_HOSTED_SDIO_PIN_* follow them. Its P4 default has the
+# data lines the other way round: D0 14 .. D3 17)
+CONFIG_ESP_HOSTED_SDIO_SLOT_1=y
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CLK_SLOT_1=18
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CMD_SLOT_1=19
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D0_SLOT_1=17
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D1_4BIT_BUS_SLOT_1=16
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D2_4BIT_BUS_SLOT_1=15
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D3_4BIT_BUS_SLOT_1=14
+CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=32
+# esp_hosted starts from a C constructor, before esp_timer, when only ~130 KB of
+# internal RAM is in the heap yet: its transport buffers and task stacks in
+# internal RAM took all but 3.5 KB and the boot aborted ("Not enough memory to
+# create timer task", 2026-10-15). In PSRAM (the P4's DMA reaches it); the
+# radio only carries updates and the clock, its latency does not matter
+CONFIG_ESP_HOSTED_MEMPOOL_PREFER_SPIRAM=y
+CONFIG_ESP_HOSTED_DFLT_TASK_FROM_SPIRAM=y

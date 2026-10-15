@@ -2,7 +2,13 @@
  * See audio_port.h. Pins from resources/ESP32-S3-Touch-AMOLED-1.8.pdf.
  * The WATCH (2.06) wires its bit clock and data elsewhere (41 / 40): GPIO 9
  * and 8, the 1.8's, are its touch and panel RESET lines - never driven here
- * on that board (board_pins.h). */
+ * on that board (board_pins.h).
+ * The CrowPanel P4 (2026-10-15) plays through the same player with no codec
+ * at all: plain 16-bit I2S (BCLK 22, LRCK 21, DATA 23, no MCLK) straight into
+ * the speaker amps, the mono mix in both slots (one amp per slot), the amps'
+ * enable on GPIO 30, ACTIVE LOW - what Elecrow's factory firmware and its
+ * sound lessons do on the 7" and the 10.1" alike (the 10.1" V1.2 schematic
+ * draws an ES8311, but none answers on the bench unit's bus). */
 #include "audio_port.h"
 #include "audio.h"
 #include "codec_port.h"
@@ -21,11 +27,23 @@
 
 static const char *TAG = "audio";
 
+#if CONFIG_POCKET_TANK_CROWP4
+#define NO_CODEC      1        /* I2S straight into the amps */
+#define PIN_I2S_MCLK  I2S_GPIO_UNUSED
+#define PIN_I2S_BCLK  C_PIN_I2S_BCLK
+#define PIN_I2S_WS    C_PIN_I2S_WS
+#define PIN_I2S_DOUT  C_PIN_I2S_DOUT
+#define PIN_AMP_EN    C_PIN_AMP_SD
+#define AMP_ON_LEVEL  0        /* active low: 10k pull-up to 3V3 on the board */
+#else
+#define NO_CODEC      0
 #define PIN_I2S_MCLK  16
 #define PIN_I2S_BCLK  (board_is_watch() ? W_PIN_I2S_BCLK : 9)
 #define PIN_I2S_WS    45
 #define PIN_I2S_DOUT  (board_is_watch() ? W_PIN_I2S_DOUT : 8)        /* ESP -> codec DSDIN */
 #define PIN_AMP_EN    46       /* NS4150B CTRL, 10k pulldown on the board */
+#define AMP_ON_LEVEL  1
+#endif
 #define BLOCK         160      /* 10 ms at 16 kHz */
 #define IDLE_US       (2 * 1000000LL)
 #define CODEC_RAIL    "aldo1"  /* A3V3: the codec's AVDD + the mic */
@@ -54,7 +72,7 @@ static int64_t s_idle_us = 5 * 1000000LL;
 
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 
-static void amp(bool on) { gpio_set_level(PIN_AMP_EN, on); }
+static void amp(bool on) { gpio_set_level(PIN_AMP_EN, on ? AMP_ON_LEVEL : !AMP_ON_LEVEL); }
 
 /* Deep sleep (2026-09-16, the night the tank died): the I2S lines and the
  * amp's CTRL are the ESP's outputs into ICs that stay powered on VCC3V3 all
@@ -75,15 +93,16 @@ void audio_port_deep_sleep_pins(void) {
     gpio_num_t QUIET_PINS[QUIET_N]; quiet_pins(QUIET_PINS);
     for (size_t i = 0; i < QUIET_N; i++) {
         gpio_num_t p = QUIET_PINS[i];
+        if (p < 0) continue;                      /* no MCLK on this board */
         gpio_reset_pin(p);                        /* off the I2S matrix routing, a GPIO again */
         gpio_set_direction(p, GPIO_MODE_OUTPUT);
-        gpio_set_level(p, 0);
+        gpio_set_level(p, p == PIN_AMP_EN ? !AMP_ON_LEVEL : 0);   /* the amp held OFF (high, on an active-low enable) */
         gpio_hold_en(p);
     }
 }
 static void release_pins(void) {
     gpio_num_t QUIET_PINS[QUIET_N]; quiet_pins(QUIET_PINS);
-    for (size_t i = 0; i < QUIET_N; i++) gpio_hold_dis(QUIET_PINS[i]);
+    for (size_t i = 0; i < QUIET_N; i++) if (QUIET_PINS[i] >= 0) gpio_hold_dis(QUIET_PINS[i]);
 }
 
 static void write_silence(int ms) {
@@ -95,12 +114,18 @@ static void write_silence(int ms) {
 /* power up: rail -> clocks -> codec -> zeros -> amp (pops stay inside) */
 static void bring_up(void) {
     int64_t t0 = esp_timer_get_time();
+#if NO_CODEC
+    i2s_channel_enable(s_tx);                 /* the amps lock to BCLK / LRCK before they are let on */
+    bool ok = true;
+    write_silence(20);
+#else
     battery_port_set_rail(CODEC_RAIL, true);
     vTaskDelay(pdMS_TO_TICKS(5));
     i2s_channel_enable(s_tx);                 /* MCLK/BCLK/LRCK running before the CSM starts */
     bool ok = codec_port_up();
     write_silence(s_settle_codec_ms);         /* the DAC's vmid / reference settle (fast charge, then normal) */
     codec_port_settled();
+#endif
     amp(true);
     write_silence(s_settle_amp_ms);           /* the NS4150B's own start-up (pop suppression): an 80 ms card
                                                  cue landed inside it at 30 ms, and mostly still at 30+40 */
@@ -115,8 +140,10 @@ static void bring_down(void) {
     amp(false);
     write_silence(10);
     i2s_channel_disable(s_tx);
+#if !NO_CODEC
     codec_port_down();
     battery_port_set_rail(CODEC_RAIL, false);
+#endif
     s_up = false;
     ESP_LOGI(TAG, "down (idle)");
 }
@@ -164,8 +191,8 @@ bool audio_port_init(i2c_master_bus_handle_t bus) {
     release_pins();                            /* a deep-sleep wake is a boot: drop the holds first */
     size_t bank_bytes = (size_t)(_binary_sounds_bin_end - _binary_sounds_bin_start);
     if (bank_bytes != SND_BANK_BYTES) { ESP_LOGW(TAG, "bank is %u bytes, sounds.h says %u: rebuild (tools/make_sounds.py build) - silent", (unsigned)bank_bytes, (unsigned)SND_BANK_BYTES); return false; }
-    if (!codec_port_present()) { ESP_LOGW(TAG, "no ES8311: silent"); return false; }
-    gpio_config_t io = { .pin_bit_mask = 1ULL << PIN_AMP_EN, .mode = GPIO_MODE_OUTPUT, .pull_down_en = GPIO_PULLDOWN_ENABLE };
+    if (!NO_CODEC && !codec_port_present()) { ESP_LOGW(TAG, "no ES8311: silent"); return false; }
+    gpio_config_t io = { .pin_bit_mask = 1ULL << PIN_AMP_EN, .mode = GPIO_MODE_OUTPUT, .pull_down_en = !AMP_ON_LEVEL ? 0 : GPIO_PULLDOWN_ENABLE };
     gpio_config(&io); amp(false);
     i2s_chan_config_t cc = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
     cc.dma_desc_num = 4; cc.dma_frame_num = BLOCK;
@@ -176,6 +203,9 @@ bool audio_port_init(i2c_master_bus_handle_t bus) {
         .gpio_cfg = { .mclk = PIN_I2S_MCLK, .bclk = PIN_I2S_BCLK, .ws = PIN_I2S_WS, .dout = PIN_I2S_DOUT, .din = I2S_GPIO_UNUSED,
                       .invert_flags = { 0 } },
     };
+#if NO_CODEC
+    std.slot_cfg.slot_mask = I2S_STD_SLOT_BOTH;  /* mono, sent in both slots: an amp on each (they pick a slot each) */
+#endif
     if (i2s_channel_init_std_mode(s_tx, &std) != ESP_OK) { ESP_LOGE(TAG, "I2S std init failed"); return false; }
     audio_init((const int16_t *)_binary_sounds_bin_start, SND_BANK_SAMPLES);   /* flash-mapped: no RAM */
     load_volume(); audio_set_volume(s_volume);

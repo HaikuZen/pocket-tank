@@ -101,6 +101,30 @@
           ]
         }
       }
+    },
+    {
+      "name": "crowp4",
+      "displayName": "Elecrow CrowPanel Advanced 7 / 10.1 (ESP32-P4)",
+      "binaryDir": "${sourceDir}/build-crowp4",
+      "cacheVariables": {
+        "IDF_TARGET": "esp32p4",
+        "SDKCONFIG": "${sourceDir}/build-crowp4/sdkconfig",
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.crowp4"
+      },
+      "vendor": {
+        "espressif/vscode-esp-idf": {
+          "settings": [
+            {
+              "type": "flashBaudRate",
+              "value": "460800"
+            },
+            {
+              "type": "monitorBaudRate",
+              "value": "115200"
+            }
+          ]
+        }
+      }
     }
   ]
 }

@@ -25,3 +25,6 @@ endif()
 if(CONFIG_POCKET_TANK_FNK0115) # the Freenove FNK0115's 800 x 480 tank
     target_compile_definitions(${COMPONENT_LIB} PUBLIC TANK_WIDE)
 endif()
+if(CONFIG_POCKET_TANK_CROWP4)   # the Elecrow CrowPanel P4's 1024 x 600 tank
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC TANK_WIDE TANK_WIDE_1024)
+endif()

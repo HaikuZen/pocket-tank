@@ -19,7 +19,9 @@
  * reset on a GPIO. Its own build is a portrait tank: panel px = tank px.
  * The Freenove FNK0115 (2026-10-14, its own build: TANK_WIDE) has a GT911,
  * read through esp_lcd_touch like the 1.8's chips; its 800 x 480 landscape
- * panel IS the tank, px for px, nothing turned and (yet) no calibration. */
+ * panel IS the tank, px for px, nothing turned and (yet) no calibration.
+ * The Elecrow CrowPanel P4 (2026-10-15, TANK_WIDE_1024) has one too, on its
+ * own pins (board_pins.h GT_*); its 1024 x 600 panel is likewise the tank. */
 #include "touch_port.h"
 #include "display_port.h"
 #include "update.h"
@@ -226,7 +228,7 @@ static bool panel_read(uint16_t *x, uint16_t *y) {
 }
 
 #ifdef TANK_WIDE
-/* ---- the FNK0115's GT911 (I2C 0x5D, its reset and INT on GPIOs) ----
+/* ---- the GT911 of the FNK0115 and the CrowPanel P4 (I2C 0x5D, its reset and INT on GPIOs) ----
  * The chip latches its I2C address (0x5D / 0x14) from INT's level when its
  * reset is let go. The driver drives INT for the address it is told ONLY when
  * driver_data names one and both pins are given; without it, it logs
@@ -240,8 +242,8 @@ static bool gt911_init(void) {
     esp_lcd_panel_io_i2c_config_t io_cfg = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
     if (!board_i2c_bus() || esp_lcd_new_panel_io_i2c(board_i2c_bus(), &io_cfg, &io) != ESP_OK) { ESP_LOGW(TAG, "no touch io"); return false; }
     static esp_lcd_touch_io_gt911_config_t addr = { .dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS };   /* = io_cfg's */
-    esp_lcd_touch_config_t tp_cfg = { .x_max = F_PANEL_W, .y_max = F_PANEL_H,
-        .rst_gpio_num = F_PIN_TP_RST, .int_gpio_num = F_PIN_TP_INT,
+    esp_lcd_touch_config_t tp_cfg = { .x_max = GT_PANEL_W, .y_max = GT_PANEL_H,
+        .rst_gpio_num = GT_PIN_TP_RST, .int_gpio_num = GT_PIN_TP_INT,
         .levels = { .reset = 0, .interrupt = 0 },
         .flags = { .swap_xy = 0, .mirror_x = 0, .mirror_y = 0 },   /* the panel's own way up: verify on the glass (director `touch log on`) */
         .driver_data = &addr };

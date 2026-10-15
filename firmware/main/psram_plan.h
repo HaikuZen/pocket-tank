@@ -18,8 +18,8 @@
 #define PLAN_FB_BYTES        (PLAN_FB_W * PLAN_FB_H * 2)          /* 329,728 (434,312; 411,640) */
 #define PLAN_FB_ALLOC        ((PLAN_FB_BYTES + 63) & ~63)         /* what a frame buffer is allocated as: the scene prefetch's
                                                                      DMA copies whole 64-byte lines (the bowl's 434,312 is not one) */
-#ifdef CONFIG_POCKET_TANK_FNK0115
-#define PLAN_FB_COUNT        3                                    /* the RGB panel's own three (display_port_rgb.c) */
+#ifdef CONFIG_POCKET_TANK_PANEL_FBS
+#define PLAN_FB_COUNT        3                                    /* the panel driver's own three (display_port_rgb.c / _dsi.c) */
 #else
 #define PLAN_FB_COUNT        2                                    /* double buffer */
 #endif

@@ -520,6 +520,11 @@ static void veg_bed_base(const tank_t *t, int b, float *bx0, int *n) {
                                                               five fronds beside it, the reef bed four fronds fewer - open sand between */
     else if (b == 1) { *bx0 = TANK_FX1 - 72; base_n = 4; }
     else if (b == 2) { *bx0 = TANK_FX1 - 146; base_n = -1; }
+#elif defined(TANK_WIDE_1024)                              /* 1024 px: at 0.84 the bed would stop 56 px short of the right
+                                                              glass - against it, as on every other board, its wall frond 20 px
+                                                              in (the one a finger cannot get past; tank_touch_drag) */
+    else if (b == 1) { *bx0 = TANK_FX1 - 128; base_n = 4; }
+    else if (b == 2) { *bx0 = TANK_W * 0.62f; base_n = 2; }
 #else
     else if (b == 1) { *bx0 = TANK_W * 0.84f; base_n = 4; }
     else if (b == 2) { *bx0 = TANK_W * 0.62f; base_n = 2; }
