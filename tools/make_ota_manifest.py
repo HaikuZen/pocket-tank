@@ -8,7 +8,7 @@ firmware/main/net_port_esp.c).
       -> ota/pocket_tank-v0.3.0-amoled18.bin  (a copy of the build's signed image)
          ota/latest-amoled18.json
 
-One run per board (2026-10-02: 0.3.0 ships three - docs/BOARDS.md). The
+One run per board (2026-10-02: 0.3.0 ships three; the FNK0115 makes four - docs/BOARDS.md). The
 board is read from the image's own marker (tools/pt_boards.py), never from
 a flag, and names both files; a tank fetches latest-<its board>.json and
 refuses a manifest or an image for another board.

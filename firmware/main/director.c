@@ -33,8 +33,30 @@ bool net_port_set_manifest_url(const char *url);
 #include "esp_attr.h"
 #include "esp_system.h"
 #include "nvs.h"
-#if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+/* the console's wire: the S3's own USB (Serial/JTAG) on the Waveshare boards;
+ * on the FNK0115 (2026-10-14) GPIO 19 / 20 carry the touch's I2C, so it is
+ * UART0, which the board's USB-UART bridge brings to its USB port */
+#if CONFIG_POCKET_TANK_FNK0115
+#include "driver/uart.h"
+#define CON_WIRE 1
+static bool con_install(void) {
+    return uart_is_driver_installed(UART_NUM_0) || uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0) == ESP_OK;
+}
+static int con_read(uint8_t *buf, int n) { return uart_read_bytes(UART_NUM_0, buf, n, 0); }
+static int con_write(const uint8_t *p, int n) { return uart_write_bytes(UART_NUM_0, p, n); }
+#define CON_NAME "UART0"
+#elif CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
 #include "driver/usb_serial_jtag.h"
+#define CON_WIRE 1
+static bool con_install(void) {
+    usb_serial_jtag_driver_config_t cfg = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+    return usb_serial_jtag_driver_install(&cfg) == ESP_OK;
+}
+static int con_read(uint8_t *buf, int n) { return usb_serial_jtag_read_bytes(buf, n, 0); }
+static int con_write(const uint8_t *p, int n) { return usb_serial_jtag_write_bytes(p, n, pdMS_TO_TICKS(50)); }
+#define CON_NAME "USB serial"
+#else
+#define CON_WIRE 0
 #endif
 
 static const char *TAG = "director";
@@ -631,7 +653,7 @@ static int64_t s_imp_last;                                   /* the last packet 
 static char s_imp_ssid[NET_SSID_MAX + 1], s_imp_pass[NET_PASS_MAX + 1];
 void net_port_esp_connect_budget(int attempts, int wait_ms);
 static void improv_send(uint8_t type, const uint8_t *data, int n) {
-#if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CON_WIRE
     /* Every packet starts on a NEW LINE and ends one (2026-10-04). The page's parser takes a packet
      * only at the start of a line, and skips everything up to the next newline once a line began
      * with anything else. At a connect Chrome first hands it what sat in the USB FIFO - the tail
@@ -647,7 +669,7 @@ static void improv_send(uint8_t type, const uint8_t *data, int n) {
     uint8_t sum = 0; for (int i = 1; i < k; i++) sum += p[i];
     p[k++] = sum;
     p[k++] = '\n';
-    int wrote = s_ok ? usb_serial_jtag_write_bytes(p, k, pdMS_TO_TICKS(50)) : -1;
+    int wrote = s_ok ? con_write(p, k) : -1;
     imp_ev(wrote == k ? 'T' : 'F', type, n ? data[0] : 0);   /* 'F': the driver did not take the whole packet */
 #else
     (void)type; (void)data; (void)n;
@@ -786,15 +808,14 @@ static bool improv_feed(uint8_t ch) {
 }
 
 void director_init(void) {
-#if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CON_WIRE
     if (s_ok) return;                                        /* update mode brought it up already */
-    usb_serial_jtag_driver_config_t cfg = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
-    s_ok = usb_serial_jtag_driver_install(&cfg) == ESP_OK;
-    ESP_LOGI(TAG, "%s", s_ok ? "console ready (type help)" : "USB serial driver failed: console off");
+    s_ok = con_install();
+    ESP_LOGI(TAG, "%s", s_ok ? "console ready on " CON_NAME " (type help)" : CON_NAME " driver failed: console off");
     if (nvs_has("bk")) ESP_LOGW(TAG, "a STAGED tank is up: the real tank is parked (restore brings it back)");
     improv_state();                                          /* the installer page listens for this after a flash */
 #else
-    ESP_LOGI(TAG, "no USB serial: console off");
+    ESP_LOGI(TAG, "no serial wire: console off");
 #endif
 }
 
@@ -806,13 +827,13 @@ void director_init(void) {
  * recognized: the page showed "Install" and no Wi-Fi item. director_early
  * runs at the top of app_main: the console, and a small task that answers
  * Improv (and nothing else) until the first director_poll takes over. */
-#if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CON_WIRE
 static volatile bool s_early_run; static volatile TaskHandle_t s_early;
 static void early_task(void *arg) {
     (void)arg;
     uint8_t buf[32]; int n;
     while (s_early_run) {
-        while ((n = usb_serial_jtag_read_bytes(buf, sizeof buf, 0)) > 0)
+        while ((n = con_read(buf, sizeof buf)) > 0)
             for (int i = 0; i < n; i++) improv_feed(buf[i]);   /* a command typed this early is dropped */
         vTaskDelay(pdMS_TO_TICKS(15));
     }
@@ -822,7 +843,7 @@ static void early_task(void *arg) {
 }
 #endif
 void director_early(void) {
-#if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CON_WIRE
     imp_ev('B', (uint8_t)esp_reset_reason(), 0);
     director_init();
     if (!s_ok || s_early) return;
@@ -833,12 +854,12 @@ void director_early(void) {
 }
 
 void director_poll(tank_t *t) {
-#if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CON_WIRE
     if (!s_ok) return;
     if (s_early_run) { s_early_run = false; while (s_early) vTaskDelay(1); imp_ev('H', t != NULL, 0); }   /* the boot's Improv task hands over */
     s_imp_tank = t != NULL;
     uint8_t buf[32]; int n;
-    while ((n = usb_serial_jtag_read_bytes(buf, sizeof buf, 0)) > 0) {
+    while ((n = con_read(buf, sizeof buf)) > 0) {
         for (int i = 0; i < n; i++) {
             char ch = (char)buf[i];
             if (improv_feed(buf[i])) continue;              /* an Improv packet from the installer page */

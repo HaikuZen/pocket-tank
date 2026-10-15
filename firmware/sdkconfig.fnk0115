@@ -1,0 +1,21 @@
+# the FNK0115 build (Freenove FNK0115L 4.3" / FNK0115Q 5.0" IPS, RGB panel + GT911): on top of sdkconfig.defaults
+#   idf.py -B <dir> -DSDKCONFIG=<dir>/sdkconfig -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.fnk0115" build
+# Flash 16 MB and octal PSRAM as the defaults say: confirm with `esptool.py flash_id` on a new unit.
+CONFIG_POCKET_TANK_FNK0115=y
+CONFIG_POCKET_TANK_DISPLAY_SH8601=n
+CONFIG_POCKET_TANK_AUDIO_ES8311=n
+# the console on UART0 (the board's USB-UART bridge): GPIO 19 / 20 are the touch's I2C, not USB
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+# the panel streams from PSRAM: run the code and rodata from PSRAM too (Freenove's
+# SPIRAM_FETCH_INSTRUCTIONS + RODATA), so a flash access or the mmap'd model never
+# stalls PSRAM under the stream. A refill that falls behind is caught by the
+# driver itself (fewer bounce EOFs than a frame needs) and the stream restarts
+# at the next VSYNC.
+# NOT LCD_RGB_RESTART_IN_VSYNC: it restarts the stream at EVERY VSYNC, not only
+# after a miss - the picture flickered now and then with it (2026-10-14).
+# NOT LCD_RGB_ISR_IRAM_SAFE: it forces GDMA_ISR_IRAM_SAFE, and IDF 5.4's async
+# memcpy (main.c's scene prefetch) then fails to install - every frame copied
+# the scene on the CPU, 7 fps (2026-10-14). Without it the bounce refill pauses
+# during a flash write (a save) and the driver's restart covers it.
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y

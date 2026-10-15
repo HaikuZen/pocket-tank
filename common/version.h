@@ -48,6 +48,9 @@
 #elif defined(TANK_WATCH)
 #define PT_BOARD         "watch206"
 #define PT_BOARD_NAME    "ESP32-S3-Touch-AMOLED-2.06"
+#elif defined(TANK_WIDE)
+#define PT_BOARD         "fnk0115"
+#define PT_BOARD_NAME    "Freenove FNK0115 (4.3 / 5.0 IPS)"
 #else
 #define PT_BOARD         "amoled18"
 #define PT_BOARD_NAME    "ESP32-S3-Touch-AMOLED-1.8"

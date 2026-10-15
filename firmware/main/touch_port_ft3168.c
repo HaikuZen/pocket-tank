@@ -16,7 +16,10 @@
  * directly over I2C; its panel px go through the display port's view
  * (display_port_panel_to_tank) and everything after that is the same.
  * The WATCH (2.06, 2026-10-02) has the FT3168 of the 1.8's V1 board, its
- * reset on a GPIO. Its own build is a portrait tank: panel px = tank px. */
+ * reset on a GPIO. Its own build is a portrait tank: panel px = tank px.
+ * The Freenove FNK0115 (2026-10-14, its own build: TANK_WIDE) has a GT911,
+ * read through esp_lcd_touch like the 1.8's chips; its 800 x 480 landscape
+ * panel IS the tank, px for px, nothing turned and (yet) no calibration. */
 #include "touch_port.h"
 #include "display_port.h"
 #include "update.h"
@@ -29,6 +32,9 @@
 #include "progression.h"
 #include "esp_lcd_touch_ft5x06.h"
 #include "esp_lcd_touch_cst816s.h"
+#ifdef TANK_WIDE
+#include "esp_lcd_touch_gt911.h"
+#endif
 #include "esp_lcd_panel_io.h"
 #include "esp_timer.h"
 #include "esp_log.h"
@@ -219,7 +225,41 @@ static bool panel_read(uint16_t *x, uint16_t *y) {
     return true;
 }
 
+#ifdef TANK_WIDE
+/* ---- the FNK0115's GT911 (I2C 0x5D, its reset and INT on GPIOs) ----
+ * The chip latches its I2C address (0x5D / 0x14) from INT's level when its
+ * reset is let go. The driver drives INT for the address it is told ONLY when
+ * driver_data names one and both pins are given; without it, it logs
+ * "I2C address initialization procedure skipped" and INT floats through the
+ * reset - and every read failed, every boot, on the bench this was found on
+ * (Agent_GT911.md). A few retries stay as a net; a board that never answers
+ * boots without touch rather than not at all. Expect a benign "gpio:
+ * conflict found for GPIO[18]": INT is driven, then made an input. */
+static bool gt911_init(void) {
+    esp_lcd_panel_io_handle_t io;
+    esp_lcd_panel_io_i2c_config_t io_cfg = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+    if (!board_i2c_bus() || esp_lcd_new_panel_io_i2c(board_i2c_bus(), &io_cfg, &io) != ESP_OK) { ESP_LOGW(TAG, "no touch io"); return false; }
+    static esp_lcd_touch_io_gt911_config_t addr = { .dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS };   /* = io_cfg's */
+    esp_lcd_touch_config_t tp_cfg = { .x_max = F_PANEL_W, .y_max = F_PANEL_H,
+        .rst_gpio_num = F_PIN_TP_RST, .int_gpio_num = F_PIN_TP_INT,
+        .levels = { .reset = 0, .interrupt = 0 },
+        .flags = { .swap_xy = 0, .mirror_x = 0, .mirror_y = 0 },   /* the panel's own way up: verify on the glass (director `touch log on`) */
+        .driver_data = &addr };
+    esp_err_t err = ESP_FAIL;
+    for (int i = 1; i <= 5 && err != ESP_OK; i++) {
+        err = esp_lcd_touch_new_i2c_gt911(io, &tp_cfg, &s_tp);
+        if (err != ESP_OK) { ESP_LOGW(TAG, "GT911 attempt %d: %s", i, esp_err_to_name(err)); s_tp = NULL; vTaskDelay(pdMS_TO_TICKS(250)); }
+    }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "no GT911: the tank runs without touch"); return false; }
+    ESP_LOGI(TAG, "GT911 ready");
+    return true;
+}
+#endif
+
 bool touch_port_init(void) {
+#ifdef TANK_WIDE
+    return gt911_init();
+#endif
     if (board_is_round()) return cst9217_init();
     if (board_is_watch()) return ft3168_init();
     esp_lcd_panel_io_handle_t io;
@@ -344,7 +384,7 @@ static void map_touch(uint16_t px, uint16_t py, float *tx, float *ty) {
      * 180-degree turn comes after it (cal_view). Until 2026-10-02 the turn came
      * first, and a turned picture's taps were off by the fit's asymmetry: ~15 px
      * on the watch, ~20 at the top of the bowl, ~2 on the 1.8. */
-#ifdef TANK_WATCH                                     /* the watch's portrait tank: the panel's px are the tank's */
+#if defined(TANK_WATCH) || defined(TANK_WIDE)        /* the watch's portrait tank, the FNK0115's landscape one: the panel's px are the tank's */
     int rx = fx, ry = fy;
 #else
     int rx = TANK_W - 1 - fy, ry = fx;

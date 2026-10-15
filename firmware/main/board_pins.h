@@ -23,7 +23,11 @@
  * RTC chip unlike it: no expander + ES7210 + RTC = the watch. DSI_PWR_EN is
  * not a GPIO: it is pulled up to ALDO2, so that rail IS the panel's power
  * switch. PWR key sense on GPIO 10 (SYS_OUT), an SD slot (1/2/3/17) and a
- * vibration motor (GPIO 18, fed from ALDO3) the tank does not use. */
+ * vibration motor (GPIO 18, fed from ALDO3) the tank does not use.
+ *
+ * The Freenove FNK0115 (2026-10-14) is not told apart at boot: it has its own
+ * build (CONFIG_POCKET_TANK_FNK0115, TANK_WIDE) and its own display port,
+ * display_port_rgb.c - its pins are at the foot of this file. */
 #ifndef BOARD_PINS_H
 #define BOARD_PINS_H
 #define PIN_LCD_CS        12
@@ -68,4 +72,41 @@
 #define W_PANEL_W         410      /* native portrait */
 #define W_PANEL_H         502
 #define W_PANEL_X_GAP     0x16
+
+/* ---- the Freenove FNK0115 (2026-10-14; its own build, TANK_WIDE) ----
+ * The IPS variants, FNK0115L (4.3") and FNK0115Q (5.0"): an 800 x 480 RGB565
+ * panel on the ESP32-S3's parallel RGB peripheral (no controller to talk to:
+ * the frame is streamed from PSRAM), a GT911 on I2C, a PWM-able backlight.
+ * No PMIC, no IMU, no RTC chip, no codec. The TN variants (FNK0115B, N) have
+ * an XPT2046 on SPI instead of the GT911: not supported. Source: Freenove's
+ * TFT_Config / esp_lcd pattern (Agent_FNK0115_new_ESP-IDF.md). The touch's
+ * I2C takes GPIO 19 / 20 - the S3's native USB pins - so this board's
+ * console and director are on UART0 through its USB-UART bridge. */
+#define F_PIN_BL          2        /* backlight, LEDC PWM */
+#define F_PIN_DE          40
+#define F_PIN_VSYNC       41
+#define F_PIN_HSYNC       39
+#define F_PIN_PCLK        42
+#define F_PIN_R0 45
+#define F_PIN_R1 48
+#define F_PIN_R2 47
+#define F_PIN_R3 21
+#define F_PIN_R4 14
+#define F_PIN_G0 5
+#define F_PIN_G1 6
+#define F_PIN_G2 7
+#define F_PIN_G3 15
+#define F_PIN_G4 16
+#define F_PIN_G5 4
+#define F_PIN_B0 8
+#define F_PIN_B1 3
+#define F_PIN_B2 46
+#define F_PIN_B3 9
+#define F_PIN_B4 1
+#define F_PIN_TP_SDA      19
+#define F_PIN_TP_SCL      20
+#define F_PIN_TP_INT      18
+#define F_PIN_TP_RST      38
+#define F_PANEL_W         800
+#define F_PANEL_H         480
 #endif

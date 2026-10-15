@@ -3590,7 +3590,7 @@ static void set_arrow(ctx_t *c, int x, int y, bool right, bool live) {
 /* ROTATION's picture: a padlock inside a turning arrow - shut when the way
  * up is locked, its shackle swung open while the picture follows the tank
  * (the two differ in shape, not in color alone) */
-static void set_lock_icon(ctx_t *c, int cx, int cy, bool locked, uint32_t rgb) {
+static void set_lock_icon(ctx_t *c, int cx, int cy, bool locked, bool padlock, uint32_t rgb) {
     for (int dy = -15; dy <= 15; dy++)                      /* the ring, open at the top right */
         for (int dx = -15; dx <= 15; dx++) {
             float r2 = (float)(dx * dx + dy * dy);
@@ -3600,6 +3600,7 @@ static void set_lock_icon(ctx_t *c, int cx, int cy, bool locked, uint32_t rgb) {
         }
     for (int i = 0; i < 6; i++)                             /* its arrowhead, at the top, pointing clockwise */
         rect_fill(c, cx + 1 + i, cy - 13 - (5 - i), 1, 2 * (5 - i) + 1, rgb);
+    if (!padlock) return;                                   /* no IMU: the arrow alone, a turn by hand */
     rect_fill(c, cx - 6, cy - 1, 12, 8, rgb);              /* the padlock's body */
     int top = locked ? cy - 7 : cy - 10;                    /* the shackle: down in the body, or lifted with one leg free */
     rect_fill(c, cx - 4, top, 8, 2, rgb);
@@ -3631,14 +3632,17 @@ void render_settings(const tank_t *t, uint16_t *fb, int stride, int bright_pct, 
     set_row(&c, SET_ROW5_Y, "SCREEN", SET_SCREEN, 2, t->screen_turned ? 1 : 0);
     draw_text(&c, SET_LABEL_X, SET_NOTE5_Y, 2, MSP_DIM, "WORN THE OTHER WAY AROUND?");
 #else
-    /* ROTATION (0.3.2): the picture turns over with the tank, unless locked */
+    /* ROTATION (0.3.2): the picture turns over with the tank, unless locked.
+       No IMU (orient_manual, 2026-10-14): a tap turns it over, UPRIGHT / TURNED. */
     {
         int x = SET_SEG_X, y = SET_SEG_Y(SET_ROW5_Y);
+        bool man = t->orient_manual, on = man ? t->orient_inv : t->orient_lock;
         draw_text(&c, SET_LABEL_X, SET_ROW5_Y, 2, MSP_TEAL, "ROTATION");
-        if (t->orient_lock) button(&c, x, y, SET_SEG_W, SET_SEG_H, MSP_TEAL, MSP_TEAL, "", 2);
-        else                button(&c, x, y, SET_SEG_W, SET_SEG_H, 0x1c2f36, MSP_DIM, "", 2);
-        set_lock_icon(&c, x + SET_SEG_W / 2, y + SET_SEG_H / 2 + 1, t->orient_lock, t->orient_lock ? MSP_INK : MSP_TEAL);
-        draw_text(&c, SET_ROT_WORD_X, SET_ROW5_Y, 2, t->orient_lock ? 0xffffff : MSP_DIM, t->orient_lock ? "LOCKED" : "UNLOCKED");
+        if (on) button(&c, x, y, SET_SEG_W, SET_SEG_H, MSP_TEAL, MSP_TEAL, "", 2);
+        else    button(&c, x, y, SET_SEG_W, SET_SEG_H, 0x1c2f36, MSP_DIM, "", 2);
+        set_lock_icon(&c, x + SET_SEG_W / 2, y + SET_SEG_H / 2 + 1, t->orient_lock, !man, on ? MSP_INK : MSP_TEAL);
+        draw_text(&c, SET_ROT_WORD_X, SET_ROW5_Y, 2, on ? 0xffffff : MSP_DIM,
+                  man ? (on ? "TURNED" : "UPRIGHT") : on ? "LOCKED" : "UNLOCKED");
     }
 #endif
     /* the firmware version, hugging the bottom left of the frame (6 px up,
@@ -3711,8 +3715,10 @@ int render_settings_touch(tank_t *t, float x, float y, bool down, int *value) {
                 if ((v == 0) != t->autofeed_off) { t->autofeed_off = v == 0; progression_settings_changed(); }
                 r = SET_TAP_FEED; *value = v;
             } else if (h == SET_TAP_ROTATE) {                  /* lock the way up it has now, or let it turn again */
-                tank_orient_lock(t, !t->orient_lock); progression_settings_changed();
-                r = SET_TAP_ROTATE; *value = t->orient_lock;
+                if (t->orient_manual) { tank_orient_turn(t); *value = t->orient_inv; }   /* no IMU: turn it over by hand */
+                else { tank_orient_lock(t, !t->orient_lock); *value = t->orient_lock; }
+                progression_settings_changed();
+                r = SET_TAP_ROTATE;
             } else if (h == SET_TAP_SCREEN) {                  /* the way up: NORMAL (0, the default) / TURNED (1) */
                 if ((v != 0) != t->screen_turned) { tank_screen_set(t, v != 0); progression_settings_changed(); }
                 r = SET_TAP_SCREEN; *value = v;

@@ -77,8 +77,8 @@ static void print_roster(const tank_t *t) {
 }
 
 /* ---------- the selftests' geometry (2026-10-01) ----------
- * Three boards run these tests - the rectangle, the round bowl (TANK_ROUND),
- * the portrait watch (TANK_WATCH) - so a test never carries one board's
+ * Four boards run these tests - the rectangle, the round bowl (TANK_ROUND),
+ * the portrait watch (TANK_WATCH), the FNK0115's 800 x 480 (TANK_WIDE) - so a test never carries one board's
  * pixels: it asks the code. The pages are laid out in PAGE space (render.h)
  * and sit centered on each glass, and a tap is the frame's: PG_X / PG_Y put a
  * page point on this board's glass; the spots under them are where a finger
@@ -987,6 +987,18 @@ static int selftest_sleep(void) {
                 if (!tank.orient_lock || tank_orient(&tank, true)) { printf("FAIL: a picture locked upright turned over\n"); return 1; }
                 r = SET_TAP_AT(SETP_SEG_X(0), rot_y);
                 printf("selftest-sleep: ROTATION: follows the tank by default, locks the way up it has (either way), saved, unlocks\n");
+                /* no IMU (orient_manual, 2026-10-14): ROTATION turns the picture over by hand, saved */
+                tank.orient_manual = true;
+                if (tank_orient(&tank, true)) { printf("FAIL: a tank with no IMU turned with a live flip\n"); return 1; }
+                r = SET_TAP_AT(SETP_SEG_X(0), rot_y);
+                if (r != SET_TAP_ROTATE || v != 1 || !tank_orient(&tank, false)) { printf("FAIL: manual ROTATION turn -> %d/%d\n", r, v); return 1; }
+                render_settings(&tank, sfb, TANK_W, 60, 2);
+                progression_save(&tank); tank_init(&tank, 8); progression_boot(&tank); tank.orient_manual = true;
+                if (!tank_orient(&tank, false)) { printf("FAIL: the turned way up did not survive the save\n"); return 1; }
+                r = SET_TAP_AT(SETP_SEG_X(0), rot_y);
+                if (r != SET_TAP_ROTATE || v != 0 || tank_orient(&tank, true)) { printf("FAIL: manual ROTATION back upright -> %d/%d\n", r, v); return 1; }
+                tank.orient_manual = false; tank_orient_lock(&tank, false);
+                printf("selftest-sleep: ROTATION with no IMU: a tap turns it over and back, saved\n");
             }
 #endif
             r = SET_TAP_AT(SET_CLOSE_X + 40, SET_FOOT_Y + 10);
@@ -3002,6 +3014,10 @@ static int selftest_shop(void) {
         tank_veg_set(&tank, 3, 0.70f);                        /* the sword plant tall: not its food */
         tank.veg_h[1][3] = 0.80f; tank_veg_sync(&tank);
         float tf0, sword0 = tank.veg_h[3][1]; tank_veg_frond(&tank, 1, 3, &tf0);
+        /* the same walk to it on every board (120 px, 75 s): the appetite grows on the way, so the
+           floor's own distance (189 px on the 1.8, 432 on the FNK0115's 800) made the bite a board's
+           - the 1.8's landed on the band's edge, 0.740 */
+        tank.urchin_x = tf0 - 120 >= TANK_FX0 + 40 ? tf0 - 120 : tf0 + 120;
         int trims0 = tank.trims; float tpx0 = tank.trim_px, ux0 = tank.urchin_x;
         tank.urchin_appetite = 0.05f; tank.urchin_rest = 0;
         SHOP_TICK(60 * 300);
@@ -3132,19 +3148,23 @@ static int selftest_shop(void) {
             setup_touch(&tank, 120, PG_Y(250), true); setup_touch(&tank, 250, PG_Y(250), true); setup_touch(&tank, 250, PG_Y(250), false);
             if (fabsf(tank_decor_x(&tank, 2) - 250) > 0.01f) { printf("FAIL: the drag did not carry the castle (x %.0f)\n", tank_decor_x(&tank, 2)); return 1; }
             render_tank(&tank, fb, TANK_W); render_setup(&tank, fb, TANK_W, 1.0f);
-            tank_decor_set(&tank, 2, 300, DECOR_Z_FRONT);
+            tank_decor_set(&tank, 2, CASTLE_X_DEFAULT, DECOR_Z_FRONT);
             pg_touch(SETUP_TOP_NEXT_X + 20, SETUP_TOP_BTN_Y + 20, true); pg_touch(SETUP_TOP_NEXT_X + 22, SETUP_TOP_BTN_Y + 24, false);
             if (setup_active()) { printf("FAIL: DONE did not close the castle's page\n"); return 1; }
             /* the render */
             fish_t *f = &tank.fish[0]; float fx0 = f->x, fy0 = f->y, fh0 = f->heading;
-            const int cx = (int)tank_decor_x(&tank, 2);                 /* where the castle stands: 300, or as near as this board's floor lets it */
+            const int cx = (int)tank_decor_x(&tank, 2);                 /* where the castle stands: the floor's 300 (CASTLE_X_DEFAULT), across bed 2 on every board */
             const int FY = TANK_BOT - 16, ax = cx, ay = FY - 20, wx = cx + 45, wy = FY - 30;   /* in the opening; on the gate wall right of it */
             f->heading = 0; tank_fish_face(f);
+            float beds_was[VEG_BEDS_MAX][VEG_FRONDS_MAX]; memcpy(beds_was, tank.veg_h, sizeof beds_was);
+            for (int b = 0; b < VEG_BEDS_MAX; b++) tank_veg_set(&tank, b, VEG_NUB);   /* the beds to stubble: where their fronds stand is the
+                                                                           board's, and a frond over the probe (bed 2's on the FNK0115, bed 1's
+                                                                           on the watch) hides the fish either way; put back after */
             park_fish(f); for (int i = 0; i < 3; i++) render_tank(&tank, fb, TANK_W);
             uint16_t bare_a = fb[ay * TANK_W + ax], bare_w = fb[wy * TANK_W + wx];
             f->x = ax; f->y = ay; render_tank(&tank, fb, TANK_W); bool in_arch = fb[ay * TANK_W + ax] != bare_a;
             f->x = wx; f->y = wy; render_tank(&tank, fb, TANK_W); bool on_wall = fb[wy * TANK_W + wx] != bare_w;
-            tank_decor_set(&tank, 2, 300, DECOR_Z_BACK);
+            tank_decor_set(&tank, 2, CASTLE_X_DEFAULT, DECOR_Z_BACK);
             park_fish(f); for (int i = 0; i < 3; i++) render_tank(&tank, fb, TANK_W); uint16_t bare_wb = fb[wy * TANK_W + wx];
             f->x = wx; f->y = wy; render_tank(&tank, fb, TANK_W); bool on_wall_behind = fb[wy * TANK_W + wx] != bare_wb;
             park_fish(f);
@@ -3152,13 +3172,15 @@ static int selftest_shop(void) {
                stubble changes the wall band only when the castle is BEHIND */
             int diff[2];
             for (int k = 0; k < 2; k++) {
-                tank_decor_set(&tank, 2, 300, k ? DECOR_Z_FRONT : DECOR_Z_BACK);
+                tank_decor_set(&tank, 2, CASTLE_X_DEFAULT, k ? DECOR_Z_FRONT : DECOR_Z_BACK);
                 static uint16_t fa[TANK_W * TANK_H];
                 tank_veg_set(&tank, 2, VEG_NUB); render_tank(&tank, fb, TANK_W); render_tank(&tank, fb, TANK_W); memcpy(fa, fb, sizeof fa);
                 tank_veg_set(&tank, 2, 0.6f);    render_tank(&tank, fb, TANK_W); render_tank(&tank, fb, TANK_W);
                 diff[k] = 0;
                 for (int y = FY - 50; y <= FY - 16; y++) for (int x = cx - 30; x <= cx + 50; x++) diff[k] += fa[y * TANK_W + x] != fb[y * TANK_W + x];
             }
+            for (int b = 0; b < VEG_BEDS_MAX; b++) if (b != 2) memcpy(tank.veg_h[b], beds_was[b], sizeof beds_was[b]);   /* bed 2 stays as the grass check left it */
+            tank_veg_sync(&tank);
             f->x = fx0; f->y = fy0; f->heading = fh0; tank_fish_face(f);
             printf("selftest-shop: castle: IN FRONT a fish in the arch shows %d, behind the gate wall %d; BEHIND on the wall %d; grass over the walls BEHIND %d px, IN FRONT %d px\n",
                    in_arch, on_wall, on_wall_behind, diff[0], diff[1]);
@@ -3950,8 +3972,8 @@ static int selftest_card(const char *prefix) {
     setup_touch(&tank, 0, 0, false);
     if (!setup_active() || !setup_is_rename() || setup_page() != SETUP_PG_RENAME || setup_fish() != 2 || tank.stage_fish != 2)
         CARD_FAIL("the rename page did not open on cy (active %d, page %d, fish %d, stage %d)", setup_active(), setup_page(), setup_fish(), tank.stage_fish);
-    for (int i = 0; i < 60 * 12; i++) { tank_tick(&tank, DT, advisor_rules); setup_touch(&tank, 0, 0, false); }   /* cy swims to its stage */
-    if (tank_dist(tank.fish[2].x, tank.fish[2].y, tank.stage_x, tank.stage_y) > 60) CARD_FAIL("cy is not on its stage after 12 s (%.0f px off)", tank_dist(tank.fish[2].x, tank.fish[2].y, tank.stage_x, tank.stage_y));
+    for (int i = 0; i < 60 * 12 * (TANK_W > 448 ? TANK_W : 448) / 448; i++) { tank_tick(&tank, DT, advisor_rules); setup_touch(&tank, 0, 0, false); }   /* cy swims to its stage (12 s across the 1.8; a wider tank, longer) */
+    if (tank_dist(tank.fish[2].x, tank.fish[2].y, tank.stage_x, tank.stage_y) > 60) CARD_FAIL("cy is not on its stage after its swim (%.0f px off)", tank_dist(tank.fish[2].x, tank.fish[2].y, tank.stage_x, tank.stage_y));
     setup_activate(&tank, SETUP_HIT_UP);                      /* c -> d */
     if (strcmp(tank.fish[2].name, "dy")) CARD_FAIL("the wheel made '%s' of cy", tank.fish[2].name);
     render_tank(&tank, fb, TANK_W); render_setup(&tank, fb, TANK_W, tank.clock);

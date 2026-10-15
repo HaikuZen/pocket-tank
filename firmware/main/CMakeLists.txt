@@ -1,11 +1,13 @@
 set(SRCS main.c director.c brightness.c batlog.c codec_port.c advisor_llm_esp.c battery_port_axp2101.c imu_port_qmi8658.c
          update_mode.c net_port_esp.c model_trailer.c)
-if(CONFIG_POCKET_TANK_DISPLAY_SH8601)
+if(CONFIG_POCKET_TANK_FNK0115)                 # the Freenove FNK0115's RGB panel (its I2C bus too)
+    list(APPEND SRCS display_port_rgb.c)
+elseif(CONFIG_POCKET_TANK_DISPLAY_SH8601)
     list(APPEND SRCS display_port_sh8601.c)
 else()
     list(APPEND SRCS display_port_stub.c)
 endif()
-if(CONFIG_POCKET_TANK_TOUCH_FT3168)
+if(CONFIG_POCKET_TANK_TOUCH_FT3168 OR CONFIG_POCKET_TANK_FNK0115)   # every board's glass, the FNK0115's GT911 among them
     list(APPEND SRCS touch_port_ft3168.c)
 else()
     list(APPEND SRCS touch_port_stub.c)
@@ -18,7 +20,7 @@ endif()
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS "."
-    REQUIRES tankcore llm esp_partition spi_flash esp_timer esp_driver_spi esp_driver_i2c esp_driver_i2s esp_driver_gpio esp_driver_usb_serial_jtag esp_lcd nvs_flash esp_app_format
+    REQUIRES tankcore llm esp_partition spi_flash esp_timer esp_driver_spi esp_driver_i2c esp_driver_i2s esp_driver_gpio esp_driver_usb_serial_jtag esp_driver_uart esp_driver_ledc esp_lcd nvs_flash esp_app_format
              esp_wifi esp_netif esp_event esp_http_client esp_https_ota app_update json mbedtls bootloader_support
     EMBED_FILES "tokenizer.bin" "../../assets/sounds/sounds.bin"
 )

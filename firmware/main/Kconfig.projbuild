@@ -2,6 +2,7 @@ menu "pocket-tank"
     config POCKET_TANK_DISPLAY_SH8601
         bool "Drive the Waveshare 1.8in AMOLED (SH8601 / CO5300 over QSPI)"
         default n
+        depends on !POCKET_TANK_FNK0115
         help
             Enable for the real board. Off = stub display port (QEMU / compile-only).
     config POCKET_TANK_ROUND
@@ -25,12 +26,26 @@ menu "pocket-tank"
             watch, on its side and centred in the glass. Build it with
             SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.watch" into its
             own build directory and sdkconfig (docs/board-amoled-2.06-watch.md).
+    config POCKET_TANK_FNK0115
+        bool "The FNK0115 build: an 800x480 tank for the Freenove FNK0115 (IPS: 4.3in L / 5.0in Q)"
+        default n
+        depends on !POCKET_TANK_ROUND && !POCKET_TANK_WATCH
+        help
+            On = TANK_WIDE: an 800x480 landscape tank on the board's RGB
+            panel (display_port_rgb.c), GT911 touch, the director on UART0
+            (the touch's I2C takes the S3's USB pins). No PMIC, IMU, RTC or
+            codec on this board: the tank runs silent, upright unless turned
+            in settings, its clock from the network. The TN variants (B, N:
+            XPT2046 touch) are not supported. Build it with
+            SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.fnk0115" into
+            its own build directory and sdkconfig (docs/board-fnk0115.md).
     config POCKET_TANK_TOUCH_FT3168
         bool "Read the FT3168 capacitive touch (taps / holds)"
         default n
     config POCKET_TANK_AUDIO_ES8311
         bool "Play the sound bank through the ES8311 codec + NS4150B amp (I2S)"
         default n
+        depends on !POCKET_TANK_FNK0115
         help
             Enable for the real board (docs/AUDIO.md). Off = stub audio port: cues compile, nothing plays.
     config POCKET_TANK_NO_PIE

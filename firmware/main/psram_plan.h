@@ -10,6 +10,7 @@
 #define PSRAM_PLAN_H
 
 #include <stdint.h>
+#include "sdkconfig.h"
 #include "tank.h"
 
 #define PLAN_FB_W            TANK_W                               /* 448 x 368; the round build's bowl is 466 x 466, the watch's tank 410 x 502 */
@@ -17,7 +18,11 @@
 #define PLAN_FB_BYTES        (PLAN_FB_W * PLAN_FB_H * 2)          /* 329,728 (434,312; 411,640) */
 #define PLAN_FB_ALLOC        ((PLAN_FB_BYTES + 63) & ~63)         /* what a frame buffer is allocated as: the scene prefetch's
                                                                      DMA copies whole 64-byte lines (the bowl's 434,312 is not one) */
+#ifdef CONFIG_POCKET_TANK_FNK0115
+#define PLAN_FB_COUNT        3                                    /* the RGB panel's own three (display_port_rgb.c) */
+#else
 #define PLAN_FB_COUNT        2                                    /* double buffer */
+#endif
 #define PLAN_FB_TOTAL        (PLAN_FB_BYTES * PLAN_FB_COUNT)      /* 659,456 */
 
 /* model: dim 384, 8 layers, 8 heads, seq 64 (word tokens) */

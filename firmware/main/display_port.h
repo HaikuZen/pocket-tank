@@ -11,6 +11,12 @@ bool display_port_init(void);
 /* push a full TANK_W x TANK_H RGB565 frame; may return before DMA completes */
 void display_port_flush(const uint16_t *fb);
 void display_port_flush_prof(int64_t *wait_us, int64_t *send_us);   /* since the last call: waiting on the wire, inside the send */
+/* the FNK0115 only: the RGB panel's own frame buffers (i < PLAN_FB_COUNT),
+   for the tank to render into - a flush of one is a switch, no copy; before
+   writing one, display_port_direct_wait until it is off the glass
+   (display_port_rgb.c) */
+uint16_t *display_port_direct_fb(int i);
+void display_port_direct_wait(const uint16_t *fb);
 /* power the panel down for device sleep; display_port_wake (or a boot's
  * display_port_init) re-sequences it */
 void display_port_sleep(void);

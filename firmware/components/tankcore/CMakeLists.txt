@@ -22,3 +22,6 @@ endif()
 if(CONFIG_POCKET_TANK_WATCH)   # the watch's 410 x 502 portrait tank
     target_compile_definitions(${COMPONENT_LIB} PUBLIC TANK_WATCH)
 endif()
+if(CONFIG_POCKET_TANK_FNK0115) # the Freenove FNK0115's 800 x 480 tank
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC TANK_WIDE)
+endif()

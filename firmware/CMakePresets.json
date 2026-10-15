@@ -1,0 +1,106 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 16,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "fnk0115",
+      "displayName": "Freenove FNK0115 (4.3 / 5.0 IPS)",
+      "binaryDir": "${sourceDir}/build-fnk0115",
+      "cacheVariables": {
+        "IDF_TARGET": "esp32s3",
+        "SDKCONFIG": "${sourceDir}/build-fnk0115/sdkconfig",
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.fnk0115"
+      },
+      "vendor": {
+        "espressif/vscode-esp-idf": {
+          "settings": [
+            {
+              "type": "flashBaudRate",
+              "value": "460800"
+            },
+            {
+              "type": "monitorBaudRate",
+              "value": "115200"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "amoled18",
+      "displayName": "1.8 AMOLED (the tank)",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "IDF_TARGET": "esp32s3",
+        "SDKCONFIG": "${sourceDir}/build/sdkconfig",
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults"
+      },
+      "vendor": {
+        "espressif/vscode-esp-idf": {
+          "settings": [
+            {
+              "type": "flashBaudRate",
+              "value": "460800"
+            },
+            {
+              "type": "monitorBaudRate",
+              "value": "115200"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "round175c",
+      "displayName": "Round 1.75C",
+      "binaryDir": "${sourceDir}/build-round",
+      "cacheVariables": {
+        "IDF_TARGET": "esp32s3",
+        "SDKCONFIG": "${sourceDir}/build-round/sdkconfig",
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.round"
+      },
+      "vendor": {
+        "espressif/vscode-esp-idf": {
+          "settings": [
+            {
+              "type": "flashBaudRate",
+              "value": "460800"
+            },
+            {
+              "type": "monitorBaudRate",
+              "value": "115200"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "watch206",
+      "displayName": "Watch 2.06",
+      "binaryDir": "${sourceDir}/build-watch",
+      "cacheVariables": {
+        "IDF_TARGET": "esp32s3",
+        "SDKCONFIG": "${sourceDir}/build-watch/sdkconfig",
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults;sdkconfig.watch"
+      },
+      "vendor": {
+        "espressif/vscode-esp-idf": {
+          "settings": [
+            {
+              "type": "flashBaudRate",
+              "value": "460800"
+            },
+            {
+              "type": "monitorBaudRate",
+              "value": "115200"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

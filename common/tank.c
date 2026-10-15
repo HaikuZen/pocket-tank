@@ -1615,10 +1615,11 @@ void tank_light_auto(tank_t *t) { t->light_override = false; }
 bool tank_screen_turned(const tank_t *t) { return TANK_WORN && t->screen_turned; }
 void tank_screen_set(tank_t *t, bool turned) { t->screen_turned = TANK_WORN && turned; }
 bool tank_orient(tank_t *t, bool live_inverted) {
-    if (!t->orient_lock) t->orient_inv = live_inverted;
+    if (!t->orient_lock && !t->orient_manual) t->orient_inv = live_inverted;
     return t->orient_inv;
 }
 void tank_orient_lock(tank_t *t, bool lock) { t->orient_lock = lock; }
+void tank_orient_turn(tank_t *t) { t->orient_inv = !t->orient_inv; t->orient_lock = true; }   /* locked: the save keeps the way up */
 
 const int LIGHT_IDLE_CHOICES[LIGHT_IDLE_N] = { 5, 15, 30, 60, 180, 300, 600, 1800 };
 int tank_light_choice(const tank_t *t) {

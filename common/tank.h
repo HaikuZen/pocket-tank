@@ -29,6 +29,11 @@
 #define TANK_W 410
 #define TANK_H 502
 #endif
+#ifdef TANK_WIDE                /* the Freenove FNK0115 (2026-10-14): its 800 x 480 RGB panel, IPS 4.3" / 5", the whole
+                                 * glass a plain rectangle - the 1.8's tank, wider and a little taller */
+#define TANK_W 800
+#define TANK_H 480
+#endif
 /* a tank WORN on a wrist (2026-10-02): the picture's way up is the keeper's
  * setting (settings SCREEN), never the live IMU's - the arm swings through
  * every angle (tank_screen_*) */
@@ -150,6 +155,11 @@ typedef enum { VEG_KIND_GRASS, VEG_KIND_SWORD } veg_kind_t;
 #define ALGAE_CELL 18
 #define ALGAE_COLS 23
 #define ALGAE_ROWS 28
+#elif defined(TANK_WIDE)                       /* the FNK0115: 32 x 20 cells of 25 px (800 x 500: the last row hangs
+                                                * 20 px under the glass) - 640 cells, inside the 644 the save keeps */
+#define ALGAE_CELL 25
+#define ALGAE_COLS 32
+#define ALGAE_ROWS 20
 #else
 #define ALGAE_CELL 16                          /* px per glass-film grid cell */
 #define ALGAE_COLS (TANK_W / ALGAE_CELL)       /* 28 */
@@ -163,6 +173,8 @@ typedef enum { VEG_KIND_GRASS, VEG_KIND_SWORD } veg_kind_t;
  * 1.8's pitch on every build (VEG_PAY_PX): the same cut, the same sand dollars. */
 #ifdef TANK_WATCH
 #define VEG_SEG_PX 4.3f
+#elif defined(TANK_WIDE)                       /* 480 px of glass, 112 more than the 1.8's 368 */
+#define VEG_SEG_PX 4.15f
 #else
 #define VEG_SEG_PX 3.2f
 #endif
@@ -370,6 +382,8 @@ typedef struct tank {
                                     * had when the keeper locked it, however the tank is turned (tank_orient) */
     bool     orient_inv;           /* the picture's way up now, true = turned over: the platform's live flip,
                                     * or what the lock froze (saved with the lock) */
+    bool     orient_manual;        /* no IMU on this board (the platform sets it at boot, not saved): ROTATION
+                                    * turns the picture over by hand, UPRIGHT / TURNED (2026-10-14, the FNK0115) */
     bool     autofeed_off;         /* settings AUTO FEED = OFF (0.3.2, saved): the tank's own trickle never
                                     * drops a pellet - feeding is the keeper's alone. Nobody dies of it; a
                                     * fish left starving in a lit tank slowly loses trust (progression.c) */
@@ -673,9 +687,13 @@ void  tank_screen_set(tank_t *t, bool turned);
  * locked. The platform hands tank_orient its live reading every frame and
  * shows what comes back: the reading itself, or - locked - the way up the
  * picture had at the lock (saved, so a locked tank boots the same way up).
- * tank_orient_lock is the settings page's toggle. */
+ * tank_orient_lock is the settings page's toggle. On a board with no IMU
+ * (orient_manual) there is no live flip to lock: ROTATION turns the picture
+ * over by hand (tank_orient_turn), kept as a lock on that way up, so the save
+ * is the same. */
 bool  tank_orient(tank_t *t, bool live_inverted);
 void  tank_orient_lock(tank_t *t, bool lock);
+void  tank_orient_turn(tank_t *t);
 
 /* Touch input (platform feeds these; sim = mouse, device = FT3168):
  *  tank_touch_hold: call EVERY FRAME while a finger rests on the glass at x,y.

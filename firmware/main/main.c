@@ -68,7 +68,7 @@ static bool s_rtc;                         /* an RTC chip answered: the wall clo
 #define PWR_SENSE ((gpio_num_t)board_pwr_sense_pin())   /* the round board and the watch: a line that is high while the PWR key is down */
 static bool pwr_sensed(void) { return board_pwr_sense_pin() >= 0; }
 static bool pwr_sense_down(void) { return pwr_sensed() && gpio_get_level(PWR_SENSE); }
-#ifdef CONFIG_POCKET_TANK_DISPLAY_SH8601
+#if defined(CONFIG_POCKET_TANK_DISPLAY_SH8601) || defined(CONFIG_POCKET_TANK_FNK0115)
 extern i2c_master_bus_handle_t board_i2c_bus(void);
 #else
 static i2c_master_bus_handle_t board_i2c_bus(void) { return NULL; }
@@ -95,6 +95,14 @@ static bool amc_cb(async_memcpy_handle_t h, async_memcpy_event_t *ev, void *ctx)
     BaseType_t hp = pdFALSE;
     xSemaphoreGiveFromISR(s_amc_done, &hp);
     return hp == pdTRUE;
+}
+
+static void scene_prefetch(uint16_t *next, const uint16_t *now) {
+    const uint16_t *scene = render_scene_buf(&s_prefetch_ep);
+    if (s_amc && scene && next && next != now &&
+        esp_async_memcpy(s_amc, next, (void *)scene, PLAN_FB_ALLOC, amc_cb, NULL) == ESP_OK) {
+        s_prefetch_fb = next; s_prefetch_pending = true;
+    }
 }
 
 static void assert_plan(void) {
@@ -629,7 +637,10 @@ static void tank_task(void *arg) {
           else if (w == SET_TAP_LIGHT) ESP_LOGI(TAG, "settings: lights out %s", v ? "AUTO (the idle rule)" : "MANUAL (double-tap the glass)");
           else if (w == SET_TAP_IDLE) ESP_LOGI(TAG, "settings: lights out after %d s still", v);
           else if (w == SET_TAP_FEED) ESP_LOGI(TAG, "settings: auto feed %s", v ? "ON" : "OFF (the keeper feeds; a starving fish loses trust)");
-          else if (w == SET_TAP_ROTATE) ESP_LOGI(TAG, "settings: rotation %s", v ? (tank.orient_inv ? "LOCKED (turned over)" : "LOCKED (upright)") : "unlocked (the picture follows the tank)"); }
+          else if (w == SET_TAP_ROTATE) {
+              if (tank.orient_manual) ESP_LOGI(TAG, "settings: rotation %s (no IMU: turned by hand)", v ? "TURNED" : "UPRIGHT");
+              else ESP_LOGI(TAG, "settings: rotation %s", v ? (tank.orient_inv ? "LOCKED (turned over)" : "LOCKED (upright)") : "unlocked (the picture follows the tank)");
+          } }
         if (touch_port_take_update() == UPD_TAP_CHECK) request_update();   /* the updates page's CHECK: save, restart into update mode */
         { int r = touch_port_take_shop();                               /* the shop's UNLOCK / MOVE / SELL */
           if (r >= SHOP_TAP_SELL) {                                     /* sold back: the refund, the piece gone, the row for sale again */
@@ -730,18 +741,21 @@ static void tank_task(void *arg) {
                into the idle framebuffer takes ~14 ms, and started after the flush it had only the
                tick and a 1 ms sleep to hide behind - the next frame waited ~9 ms for it. The flush
                only reads this frame's buffer; the copy rides alongside it. */
-            { uint16_t *next = fb[cur ^ 1];
-              const uint16_t *scene = render_scene_buf(&s_prefetch_ep);
-              if (s_amc && scene && next && next != fb[cur] &&
-                  esp_async_memcpy(s_amc, next, (void *)scene, PLAN_FB_ALLOC, amc_cb, NULL) == ESP_OK) {
-                  s_prefetch_fb = next; s_prefetch_pending = true;
-              } }
+#ifdef CONFIG_POCKET_TANK_FNK0115
+            /* the FNK0115 renders into the panel's own three buffers: the next one may still
+               be on the glass, so the prefetch waits until the refill has left it */
             display_port_flush(fb[cur]);
+            display_port_direct_wait(fb[(cur + 1) % PLAN_FB_COUNT]);
+            scene_prefetch(fb[(cur + 1) % PLAN_FB_COUNT], fb[cur]);
+#else
+            scene_prefetch(fb[(cur + 1) % PLAN_FB_COUNT], fb[cur]);
+            display_port_flush(fb[cur]);
+#endif
             touch_port_poll(&tank);
             pf_tail = esp_timer_get_time();
             render_us += t1 - t0; flush_us += pf_tail - t1; frames++;
         }
-        cur ^= 1;
+        cur = (cur + 1) % PLAN_FB_COUNT;
         if (now - last_log > 10 * 1000000) {
             if (frames) {
                 unsigned ep; const uint16_t *sc = render_scene_buf(&ep);
@@ -867,17 +881,23 @@ void app_main(void) {
     brightness_init();
     bat_hist_load();
     assert_plan();
+#ifndef CONFIG_POCKET_TANK_FNK0115                 /* the FNK0115 renders into the panel's own two: below, after display_port_init */
     for (int i = 0; i < PLAN_FB_COUNT; i++) {
         fb[i] = heap_caps_aligned_alloc(64, PLAN_FB_ALLOC, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (!fb[i]) fb[i] = i ? fb[0] : NULL;          /* no PSRAM: share or skip */
     }
     if (!fb[0]) ESP_LOGW(TAG, "no framebuffer RAM: rendering disabled (tank still runs)");
+#endif
     /* the board first: the display (it owns the I2C bus), the glass, the
        PMIC - then, if this boot was asked for, UPDATE MODE before anything
        else exists (docs/OTA.md): the pages over the radio with the whole
        internal heap to itself. Back from it, the normal boot goes on. */
     render_clock_us = esp_timer_get_time;    /* per-stage frame profiling in the display log */
     display_port_init();
+#ifdef CONFIG_POCKET_TANK_FNK0115
+    for (int i = 0; i < PLAN_FB_COUNT; i++) fb[i] = display_port_direct_fb(i);
+    if (!fb[0]) ESP_LOGW(TAG, "no panel frame buffers: rendering disabled (tank still runs)");
+#endif
     if (pwr_sensed()) {                      /* the PWR key's sense line: a plain input (a deep-sleep wake left it an RTC pad) */
         rtc_gpio_deinit(PWR_SENSE);
         gpio_config_t sense = { .pin_bit_mask = 1ULL << PWR_SENSE, .mode = GPIO_MODE_INPUT };
@@ -921,7 +941,12 @@ void app_main(void) {
        every frame, and in PSRAM that was ~1.5 ms; PSRAM fallback */
     { void *ds = heap_caps_malloc(render_decor_scratch_size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);   /* the coral / cluster tables: PSRAM, never .bss */
       if (ds) render_set_decor_scratch(ds); else ESP_LOGW(TAG, "decor scratch: no PSRAM (%u B) - falling back to internal", (unsigned)render_decor_scratch_size()); }
+#ifdef CONFIG_POCKET_TANK_FNK0115
+    /* the FNK0115: 48 KB at 800 x 480, and the RGB panel's bounce buffers want the internal RAM more */
+    uint32_t *dirty = NULL;
+#else
     uint32_t *dirty = heap_caps_malloc(RENDER_DIRTY_WORDS * 4, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#endif
     if (!dirty) dirty = heap_caps_malloc(RENDER_DIRTY_WORDS * 4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (dirty) render_set_dirty_mask(dirty); else ESP_LOGW(TAG, "no dirty mask RAM: full redraw per frame");
     ESP_LOGI(TAG, "dirty mask %s", !dirty ? "none" : esp_ptr_external_ram(dirty) ? "PSRAM" : "internal SRAM");
@@ -943,7 +968,7 @@ void app_main(void) {
     codec_port_init(board_i2c_bus());  /* the ES8311 fully down until a cue needs it (its digital side shares VCC3V3) */
     audio_port_init(board_i2c_bus());  /* the sound bank + player task (docs/AUDIO.md); silent without the codec */
     tank_events_set(on_tank_event, NULL);
-    imu_port_init(board_i2c_bus());   /* screen auto-flip; absent IMU = always upright */
+    bool has_imu = imu_port_init(board_i2c_bus());   /* screen auto-flip; absent IMU = settings' ROTATION turns it by hand */
     director_init();                  /* serial scenario console (filming / bench) */
     /* scene-prefetch DMA: installed only AFTER the display grabbed its SPI DMA
        channel — installed earlier, async memcpy steals SPI2's GDMA trigger
@@ -957,6 +982,7 @@ void app_main(void) {
         }
     }
     tank_init(&tank, (uint32_t)esp_timer_get_time() ^ 0xC0FFEEu);
+    tank.orient_manual = !has_imu;
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     bool from_sleep = cause == ESP_SLEEP_WAKEUP_EXT0 || cause == ESP_SLEEP_WAKEUP_EXT1 || cause == ESP_SLEEP_WAKEUP_TIMER;
     if (from_sleep) {                        /* the night, lived through in one step */
