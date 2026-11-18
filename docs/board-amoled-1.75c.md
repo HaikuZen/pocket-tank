@@ -198,6 +198,16 @@ cell present (100%, 4.14 V on the cable).
   time by exactly it; the next good sync lives it). No network saved: the
   deep sleep as before. Director `clock` says what the boot's sync did, the
   hours lived, and what tonight is.
+  0.3.9 (Bananna's pendant failed it two mornings running, 2026-10-23):
+  three tries of 10 s inside 30 s (it was two of 8 s, and one when the
+  first sweep missed the router; a router not seen is swept for until
+  the 30 s are up), the first from the learned channel
+  (NVS "wifi"/"chan"), and `clock` gives the failure's reason, kept past
+  the Update restart ("last failure"; docs/release-0.3.9.md).
+  0.3.9 too (THE STOPPED CLOCK, 2026-10-24): the boards WITH a chip take
+  this path when the chip stopped - no cell and the cable out - instead of
+  seeding build time; they also sync once while the chip runs, to be on
+  real time before a stop (docs/release-0.3.9.md).
   Verified 2026-10-03: Wi-Fi saved on the glass -> "the FIRST sync (clock
   moved, nothing lived)", the clock within 3 s of the Mac's; a long-press
   power-off at 10:56, PWR at ~11:07:50 -> "the clock had stopped (the time

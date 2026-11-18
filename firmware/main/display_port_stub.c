@@ -11,17 +11,32 @@ static int64_t last_report = 0;
 bool display_port_init(void) { ESP_LOGI(TAG, "stub display port (no panel)"); return true; }
 void display_port_sleep(void) {}
 void display_port_wake(void) {}
+bool display_port_panel_power_check(void) { return false; }
+uint32_t display_port_panel_heals(void) { return 0; }
+void display_port_panel_rail_test_off(void) {}
 void display_port_set_inverted(bool inverted) { (void)inverted; }
+void display_port_set_quarter(int q) { (void)q; }
+bool display_port_quarters(void) { return false; }
+void display_port_side_tune(int madctl, int gx, int gy) { (void)madctl; (void)gx; (void)gy; }
+void display_port_side_info(int *madctl, int *gx, int *gy, bool *on) { *madctl = 0; *gx = *gy = 0; *on = false; }
+void display_port_probe(bool on) { (void)on; }
 static uint8_t s_brightness = 0xFF;
 void display_port_set_brightness(uint8_t level) { s_brightness = level; }
 uint8_t display_port_brightness(void) { return s_brightness; }
 
 bool board_is_round(void) { return false; }
+bool board_is_175(void) { return false; }
 void display_port_deep_sleep_pins(bool tp_awake_high) { (void)tp_awake_high; }
 void display_port_deep_standby(void) { }
 void display_port_deep_sleep_bus(void) { }
 bool board_has_expander(void) { return true; }
+uint8_t board_es7210_addr(void) { return 0; }
 bool board_is_watch(void) { return false; }
+bool board_is_square(void) { return false; }
+const char *board_port_hw(void) { return NULL; }   /* no chips to ask */
+bool board_port_probed(void) { return true; }
+void display_port_set_madctl(uint8_t v) { (void)v; }
+uint8_t display_port_madctl(void) { return 0; }
 int  board_pwr_sense_pin(void) { return -1; }
 void display_port_frame_origin(int *px, int *py) { *px = 0; *py = 0; }
 void display_port_set_view(int view) { (void)view; }
@@ -29,6 +44,9 @@ int  display_port_view(void) { return DISPLAY_VIEW_FIT; }
 void display_port_panel_to_tank(int px, int py, float *tx, float *ty) { *tx = (float)px; *ty = (float)py; }
 
 void display_port_flush_prof(int64_t *wait_us, int64_t *send_us) { *wait_us = *send_us = 0; }
+bool display_port_flush_async(const uint16_t *fb, void (*done)(const uint16_t *, void *), void *arg) { (void)fb; (void)done; (void)arg; return false; }
+void display_port_flush_wait(const uint16_t *fb) { (void)fb; }
+void display_port_flush_async_prof(int64_t *task_us, int *frames, int64_t *copy_us) { *task_us = 0; *frames = 0; *copy_us = 0; }
 void display_port_flush(const uint16_t *fb) {
     (void)fb;
     frames++;
@@ -38,3 +56,5 @@ void display_port_flush(const uint16_t *fb) {
         frames = 0; last_report = now;
     }
 }
+
+void board_sd_select(bool on) { (void)on; }

@@ -36,5 +36,8 @@ bool model_trailer_erase(const esp_partition_t *mp);
  * Returns true when the model is known good (a trailer stands, or was just
  * written); false = no trailer and not the shipped model (still used). */
 bool model_trailer_check(const esp_partition_t *mp, const void *map);
+/* after the check: no trailer, and the body matches no model we ever shipped
+ * (notice.h NOTICE_MODEL_DAMAGED). A tank with a good trailer is never hashed. */
+bool model_trailer_unknown_body(void);
 /* sha256 of len bytes at p, hex into out[65] (a flash-mapped model takes ~1 s) */
 void model_sha256_hex(const void *p, size_t len, char out[65]);

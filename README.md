@@ -27,23 +27,27 @@ wall clear last explore time day  ->  seek_food urgency 8
 This repo is the complete project: the trained model, the distillation
 pipeline that made it, a PC simulator, and the firmware for a real board.
 Got the board? **[Install it from your browser](https://pocketank.com/install/)**,
-no toolchain needed.
+no toolchain needed. Come hang out with other keepers on the
+**[Pocket Tank Discord](https://pocketank.com/discord)**: show off your tank,
+get help, and share ideas for what comes next.
 
-The current release is **v0.3.3** (alpha); the settings page shows the one
+The current release is **v0.4.1** (alpha); the settings page shows the one
 on your tank. What changed in each release:
 **[pocketank.com/updates](https://pocketank.com/updates/)**.
 
-It runs on three Waveshare boards: the 1.8-inch original, the round
+It runs on four Waveshare boards: the 1.8-inch original, the round
 1.75-inch **pendant**, where the tank fills the whole circle like a little
-fishbowl, and the 2.06-inch **watch**, a tall tank you can wear. Same fish,
-same shop, same saves on all three. From 0.3 on a tank updates itself
-over Wi-Fi, so the cable is only for the first install.
+fishbowl, the 2.06-inch **watch**, a tall tank you can wear, and the
+2.16-inch **square**, the biggest screen of the four in a little white box.
+Same fish, same shop, same saves on all four. From 0.3 on a tank updates
+itself over Wi-Fi, so the cable is only for the first install. Each board
+charges at a current sized for its own battery (0.3.4).
 
-| The 1.8 | The pendant | The watch |
-|:---:|:---:|:---:|
-| <img src="docs/media/board-amoled18.webp" width="220" alt="The Waveshare 1.8-inch board from the front: a black rectangle with rounded corners"> | <img src="docs/media/board-round175c.webp" width="220" alt="The Waveshare 1.75C board from the front: a round screen in a silver aluminum ring"> | <img src="docs/media/board-watch206.webp" width="220" alt="The Waveshare 2.06-inch watch on its strap"> |
+| The 1.8 | The pendant | The watch | The square |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/media/board-amoled18.webp" width="220" alt="The Waveshare 1.8-inch board from the front: a black rectangle with rounded corners"> | <img src="docs/media/board-round175c.webp" width="220" alt="The Waveshare 1.75C board from the front: a round screen in a silver aluminum ring"> | <img src="docs/media/board-watch206.webp" width="220" alt="The Waveshare 2.06-inch watch on its strap"> | <img src="docs/media/board-amoled216.webp" width="220" alt="The Waveshare 2.16-inch board from the front: a square screen in a white case"> |
 
-![The same tank on the 1.8, the pendant and the watch](docs/media/sim-three-boards.png)
+![The same tank on the 1.8, the pendant, the watch and the square](docs/media/sim-four-boards.png)
 
 ## Contents
 
@@ -204,8 +208,9 @@ ring. Tap a badge to read it: a small panel with arrows at its top corners
 that step through the rest of the group without going back to the page (a
 fish's six badges, the tank's six, the fry's gates, or the fish themselves
 from a fish's name); tap anywhere else to dismiss. At the foot of the
-page: SETTINGS, UPGRADES (the shop) and CLOSE. The shop's and the settings
-page's own CLOSE bring you back here, not out to the tank.
+page, since 0.4, five squares: the sand dollar (the shop), the cog
+(settings), MY TANKS, the passport (your visitors) and CLOSE. The shop's and
+the settings page's own CLOSE bring you back here, not out to the tank.
 
 **The next fry.** While the tank can still grow, a NEW FRY row sits under
 the last fish: what the next arrival needs, as badges that light up when
@@ -224,6 +229,8 @@ open its card. RENAME brings back the letter wheel. SELL, tapped twice,
 trades the fish for sand dollars, and older fish are worth more: 5 for a
 fry, 15 for a juvenile, 30 for an adult, 60 for an elder. A tank keeps at
 least two fish, and after a sale the next fry waits for 12 more meals.
+While your tank is linked to a friend's, the card also shows GIVE (see
+*Tanks side by side* below).
 
 **More badges, and the school at a glance.** Each fish can earn *first rest
 in the seagrass*. The tank can earn *a school of ten shrimp*, and the reef
@@ -241,14 +248,15 @@ fish in its own colors, with an outline for each open place.
 ![A gate's HOW? tip](docs/media/sim-fry-how.png)
 
 **Sand dollars.** Caring for the tank earns points, and the shop spends
-them on things for the tank. A meal the fish eat from your hand pays 2; a
+them on things for the tank. A meal the fish eat from your hand pays 2
+(one every five minutes, however many taps); a
 fish growing up pays 5, 10 and 25 for juvenile, adult and elder; a fry
 born 20; a fish that comes to trust you completely 15; every hundred algae
 colonies you wipe away pay 25, and so does every 250 cm of grass you
 cut, again and again. Nothing is ever needed and nothing is lost: a tank with no
-sand dollars is exactly the tank there was before. The coin on the
-milestones page's TANK row shows your balance, and it (or the UPGRADES
-button) opens the shop: a row per item with its price, UNLOCK when you can
+sand dollars is exactly the tank there was before. The sand dollar at
+the foot of the milestones page opens the shop, which shows your balance:
+a row per item with its price, UNLOCK when you can
 afford it, IN TANK once you own it, and HOW TO EARN for the list. Three
 things to buy so far. The **sword plant** (40) is a fourth bed of broad
 leaves on the open floor, trimmed and grown and counted as cover like the
@@ -290,12 +298,14 @@ BEHIND puts it behind the grass and the fish, a ruin in the weeds; IN
 FRONT stands it in front of the grass, which stops at its walls, and the
 fish swim through the arch, tucked behind the jambs as they pass. The
 fish do not know it is there. They find the arch by chance, which is most
-of the charm.
+of the charm. Since 0.3.6 the arch is open: you see the back of the tank
+through it, a little darker, as through a tunnel, and the grass grows in
+it.
 
 **The coral.** The fourth thing in the shop (100) is a branching coral,
 drawn from a little skeleton of rounded branches on a chunky pixel grid:
 a dark rim on the shaded side, a lit edge toward the light, pale tips,
-and a speckled body in whatever colour you give it. Its placement page
+and a speckled body in whatever color you give it. Its placement page
 has the drag, a DEPTH bar of two choices (BEHIND or IN FRONT, like the
 castle's), and a COLOR row of eight swatches; the coral on the floor wears
 the pick as you tap, and the
@@ -321,7 +331,7 @@ day one; over two weeks it fills out to full size, and over the two weeks
 after that it blooms, up to forty-eight thin tentacles appearing one at a
 time round the tube mouths, the coral's tips and the brain's top, every
 one swaying. Its placement page has the drag, the two depths, and a LOOK
-row of three tiles instead of a colour: REEF is the art's orange, purple
+row of three tiles instead of a color: REEF is the art's orange, purple
 and cyan; LAGOON is pink, blue and lime; DUSK is magenta, teal and gold.
 It sits in a hump of stones like the coral.
 
@@ -348,10 +358,70 @@ the grass short and it leaves the sword plant alone, so there is still
 trimming for you to do. Tap it for its card: how much grass it has eaten so
 far, and whether it is grazing or resting.
 
+**The seahorse.** The eighth thing in the shop (220). It perches on a blade
+of grass, a sword leaf, a coral branch or a castle tower, tail curled
+round, and moves every few minutes. Rest a still finger on the glass and
+it swims over and curls its tail round your fingertip; while it holds on,
+the fish near your finger trust you twice as fast. A pellet that drifts to
+its snout is snapped up, and the first one every ten minutes earns you 10
+sand dollars. Tap it for its card.
+
+**A pumpkin for October.** The ninth thing in the shop (75), on the shop's
+last page until the first update after Halloween; one you have bought
+stays yours. By day it is a carved pumpkin with a lit face. Turn the tank
+light off (double-tap the glass) and its candle lights the water, the sand,
+the grass and whatever swims by, and anything in front of it, the castle
+too, throws a shadow across the sand. Finally a good reason to turn the
+tank light off.
+
+**The bubble volcano.** The tenth thing in the shop (190). A cone of
+stacked boulders as wide as the castle, with a pool of lava at the top
+that breathes, a stream of bubbles rising from the crater and a cave at
+its foot. Turn the tank light off and the lava and the bubbles keep their
+glow on the water and the sand. BEHIND or IN FRONT, like the castle.
+
+**The strawberry crab.** The eleventh thing in the shop (140). A small red
+crab with white spots that lives on the sand. It strolls, digs, eats the
+pellets that reach the floor, naps in the castle's arch or the volcano's
+cave, and comes out more with the light off. Tap it for its card; three
+quick raps send it running for cover. When the shrimp crowd a pellet it
+wants, it raises its claws and they scatter; after three pellets it is
+full for a while. Now and then a dig turns up a sand dollar. The find
+waits for you - the light on and the tank touched in the last few minutes -
+and the crab holds it up in both claws for three minutes, with a sound:
+tap it to take it, 10 sand dollars the first time and 20 every time after.
+The crab, the urchin and the snail wander in front of your decorations as
+often as behind them.
+
+**Backgrounds.** New in 0.4.1: the shop has three areas, DECORATIONS,
+CRITTERS and BACKGROUNDS, as squares along the bottom, and the ? square is
+HOW TO EARN. BACKGROUNDS holds seven new backdrops for the back of the
+tank: ATLANTIS, KELP FOREST, TWILIGHT DEEP, LAGOON, ROCK RIDGES, REEF WALLS
+and GROTTO, 100 sand dollars each. OPEN WATER, the original background,
+stays free. UNLOCK pays and puts it in use, and USE switches between the
+ones you own for free. A background
+belongs to the tank it was bought in. The sword plant can stand behind the
+seagrass again, too: pick BEHIND or IN FRONT under THE SEAGRASS on its page.
+
+**The shelf, and the lock.** Since 0.3.9 anything you can move you can
+also put away: SHELVE on a piece's page or in its shop panel, and it waits
+on the shelf, drawn as it is in a little tank on its shop row, where a
+coral or a plant keeps growing; PUT BACK returns it to its spot. LOCK on
+the page keeps a piece where it stands: a held finger passes it by from
+then on, and the shop's MOVE still moves it.
+
 **The night shift.** The snail and the urchin keep working while the tank
 sleeps. A tank with a snail wakes up with about a third less algae on the
-glass, and a tank with an urchin wakes up to shorter grass. Helpers take
-the edge off a long sleep; they never take the chores away.
+glass, and a tank with an urchin wakes up to shorter grass. Since 0.3.6 the
+urchin also holds the grass in check while the tank is awake, and both do
+more overnight, so a week away comes back cleaner. Helpers take the edge
+off a long sleep; they never take the chores away.
+
+**What stands in front.** Every decoration has a place in the stack, and
+the one you placed last goes on top. Two decorations on the same spot?
+Hold one to open its page: two arrows between SELL and DONE move it a
+step back or forward, and the page says where it stands, BEHIND THE CORAL
+or IN FRONT OF THE CASTLE.
 
 **Selling back, and the short way to a piece.** Tap and hold a still
 finger on any decoration in the tank and its placement page opens right
@@ -387,7 +457,9 @@ sale; they are permanent residents.
 ![SELL armed in the castle's modal](docs/media/sim-shop-sell.png)
 
 **The light.** Two quick taps on the glass turn the tank light off and on;
-in the dark the fish rest and the palette dims. The first time a double-tap
+in the dark the fish rest and the palette dims, and everything else works
+as it does with the light on: the sounds, the finger, the seahorse (it
+rests on its perch until the light comes back). The first time a double-tap
 turns the light off, a small LIGHTS OUT notice says what happened and how
 to turn it back on, once per tank. The settings page has a
 LIGHTS OUT row that can hand the light to the tank instead: step it from
@@ -415,6 +487,31 @@ charging, about how long it will last (or how long until it is full), how
 long ago it was unplugged, the screen-on time since, and how long a full
 charge lasts. The tank learns those times from its own battery as you use
 it.
+
+**Tanks side by side.** New in 0.4: put two tanks next to each other and
+tap LINK on each one's settings page. The tanks find each other, you hold
+the arrows on the sides that touch, and the glass between them opens. The
+fish swim over to visit, look around, and come home on their own. If the
+tanks move apart, every fish finds its way home. The tanks talk to each
+other directly by radio, with no Wi-Fi network and no internet. A tank
+holds five fish of its own, and since 0.4.1 it always has room for two
+visitors on top, so up to seven swim during a visit. Your own fish coming
+home always get in.
+
+**Visitors.** A visitor wears its home tank's badge, small, above it. Tap
+it to see its passport: its name, its look, its home, and which of your
+fish it is interested in, as a row of hearts. Its home is two words made
+from its tank's ID, like AMBER COVE, or the name its keeper gave the tank
+on MY TANKS. COLLECT keeps it in your visitor collection (the passport at
+the foot of the milestones page), ten pages of twelve; DEPORT sends it home.
+
+**Fry from two tanks, and gifts.** A visitor that spends time with one of
+your grown fish can court it and have a fry, if one of the two tanks has
+room for one more fish. A fry like that sells for double. While the tanks
+are linked, a fish's card shows GIVE between RENAME and SELL: tap it twice
+and the other tank asks its keeper, who says yes or no on their own glass.
+A given fish lives there for good, with its name, its look and its badges.
+Every tank keeps at least two fish.
 
 **Updates over Wi-Fi.** The settings page has an UPDATES button. Tap CHECK
 FOR UPDATES and the tank pauses, turns its radio on and looks for a newer
@@ -447,31 +544,41 @@ deepest sleep: the only chip still awake is the power-management chip, and
 its rule is that the key must be held for about an eighth of a second
 before it turns the board on - a quick tap does nothing. Press it like you
 mean it. The tank decides how deep it sleeps; you never do. Holding PWR
-powers it off at once. Hold BOOT and tap the glass to reset the tank. Flip
+powers it off at once. Hold BOOT for five seconds, then tap the glass, to
+reset the tank. Flip
 the device and the screen follows.
 
 **First run.** A new tank, whether a fresh install or a reset, opens with a
-short setup over the live water. A welcome page; then you place the bubble
-column, dragging it left or right across the tank while the bubbles and
-the airstone follow your finger; then each of the two fry in
-turn: the fish being introduced swims a slow loop front and center with a
-ring around it while you name it on an arcade-style letter wheel (touch a
-slot, drag up or down to spin its letter, or tap the chevrons above and
-below it), then you pick its body color from eight swatches and watch the
-fry wear it. Its accent stays a question mark: a fry has no markings yet,
-and they come in as it grows. A page of care tips finishes the tour. The
-light stays on throughout, and the column, the names and the colors you
-chose are saved with the tank.
+short setup over the live water. A welcome page; then each of the two fry
+in turn, and since 0.4 you design it before you name it. COLORS picks its
+body color, its markings (BARS, a MASK, an EYE BAND, or none) and their
+color, from one palette of nine; FORM picks its body (CLASSIC, SLENDER or
+BULBOUS) and its fins (CLASSIC, VEIL or SAIL). ROLL picks for you. Both
+pages show the fry as it is NOW beside the fish it will be GROWN UP, since
+a fry's markings come in as it grows and its fins when it is an adult.
+Then the fish swims a slow loop front and center with a ring around it
+while you name it on an arcade-style letter wheel (touch a slot, drag up
+or down to spin its letter, or tap the chevrons above and below it). After
+the two fish you place the bubble column, dragging it left or right across
+the tank while the bubbles and the airstone follow your finger, and a page
+of care tips finishes the tour. The light stays on throughout, and the
+column, the names and the looks you chose are saved with the tank.
 
 ![Naming a fish on the letter wheel](docs/media/sim-setup-name.png)
 
 **A birth.** Every arrival is an event. The fry hatches low in the nursery
-grass wearing its family's colors, the body of one parent and the markings
-of the other, and the tank stops to introduce it. *A new fry!* rings the
-newcomer wherever it is and names its parents; the next page is the same
-letter wheel, so you name it; the last page shows the fry on its own, as it
-is now, with what it inherited: whose body, whose markings, and how bold
-and sociable it is on bars marked with each parent's own value. Its
+grass and the tank stops to introduce it. *A new fry!* rings the newcomer
+wherever it is and names its parents; the next page is the same letter
+wheel, so you name it; then its family page shows the fry as it is now and
+the fish it will become, and where each part came from: its body, fins,
+markings and both colors, each from one parent or the other; the last page
+shows how bold and sociable it is on bars marked with each parent's own
+value. Every fish also carries a hidden look it can pass on, so a family
+trait can skip a generation (the family page marks a part that came from a
+parent's hidden copy). Now and then a fry has something new that neither
+parent has: its welcome says SOMETHING NEW and its ring turns gold, and the
+tank earns a badge for its first. Fish from before 0.4 keep their classic
+look, and they carry hidden looks too, so their fry may surprise you. Its
 markings, like any fry's, come in as it grows. The welcome is saved with
 the tank until you finish it, so a fry born while you were away is waiting
 for you when you come back.
@@ -480,7 +587,9 @@ for you when you come back.
 ![Naming the new fry](docs/media/sim-birth-name_new.png)
 ![The family page: what it inherited](docs/media/sim-birth-family.png)
 
-**Starting over.** Hold BOOT and tap the glass: a *Reset tank?* prompt
+**Starting over.** Hold BOOT for five seconds, then tap the glass (a tap
+sooner is just a tap, so small hands can't wipe a tank by accident): a
+*Reset tank?* prompt
 appears over the water with a NO and a YES. YES wipes the save and two new
 fry take the tank, with the first-run setup to name them; NO, a sleep, or
 twenty seconds of silence keep everything.
@@ -556,7 +665,7 @@ touch ports are stubs in the QEMU overlay; decisions go to the log.
 
 The easy way onto a board: **https://pocketank.com/install/**.
 Plug the Waveshare board into your computer, open the page in Chrome or Edge,
-pick your board (the 1.8, the pendant or the watch), click *Install Pocket
+pick your board (the 1.8, the pendant, the watch or the square), click *Install Pocket
 Tank*, pick the port, and watch the bar fill. Then the page asks for your
 Wi-Fi: the tank's screen stays dark while it lists the networks it can see,
 you pick yours and type the password, and the tank connects to check it
@@ -578,7 +687,8 @@ flash (NVS at `0x9000`) that none of the four parts cover, so your fish,
 their names, trust, history, badges, sand dollars and decorations carry on.
 Every version loads the saves of every earlier one (the save only ever grows
 at the tail, and the one field that went in mid-struct is slid into place on
-load). To start over, hold BOOT and tap the glass for the *Reset tank?*
+load). To start over, hold BOOT for five seconds and tap the glass for the
+*Reset tank?*
 prompt; the page also has an "erase and install fresh" button for a board
 that won't get that far. The settings page shows the release at its foot,
 small and dim ("V0.3.3 ALPHA", then the build id), so you can tell what
@@ -594,17 +704,18 @@ vendored flasher). Any HTTPS static host will do, GitHub Pages included;
 
 ## Run it on real hardware
 
-Three Waveshare boards are supported, all ESP32-S3R8 with 16 MB flash and
+Four Waveshare boards are supported, all ESP32-S3R8 with 16 MB flash or more and
 8 MB PSRAM, an AMOLED, capacitive touch, an IMU and a PMIC:
 
 | Board | Glass | Build |
 |---|---|---|
 | **ESP32-S3-Touch-AMOLED-1.8** (V1 and V2, auto-detected) | 368×448, shown as a 448×368 tank | the default |
-| **ESP32-S3-Touch-AMOLED-1.75C**, the pendant | 466 px circle | `sdkconfig.round` |
+| **ESP32-S3-Touch-AMOLED-1.75C**, the pendant (the plain **1.75** and **1.75-B** run the same image, in beta since 0.3.6) | 466 px circle | `sdkconfig.round` |
 | **ESP32-S3-Touch-AMOLED-2.06**, the watch | 410×502, portrait | `sdkconfig.watch` |
+| **ESP32-S3-Touch-AMOLED-2.16**, the square | 480×480 | `sdkconfig.square` |
 
 Each board's touch panel is calibrated in its touch port, so a tap lands
-where the finger is. [docs/BOARDS.md](docs/BOARDS.md) has what the three
+where the finger is. [docs/BOARDS.md](docs/BOARDS.md) has what the four
 share and where they differ; each board's own traps are in its doc. The
 browser installer above is the no-toolchain path; this is the developer one.
 
@@ -615,12 +726,13 @@ idf.py -p /dev/cu.usbmodem* flash
 esptool.py --chip esp32s3 -p /dev/cu.usbmodem* write_flash 0x290000 ../model/out/model_q4.bin
 ```
 
-The other two boards build from the same tree on top of their own fragment,
+The other three boards build from the same tree on top of their own fragment,
 each in its own build directory:
 
 ```bash
 idf.py -B build-round -DSDKCONFIG=build-round/sdkconfig "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.round" build
 idf.py -B build-watch -DSDKCONFIG=build-watch/sdkconfig "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.watch" build
+idf.py -B build-square -DSDKCONFIG=build-square/sdkconfig "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.square" build
 ```
 
 Every build is signed, so the first build needs a key: `tools/ota_key.sh`
@@ -636,7 +748,7 @@ explains where every kilobyte goes. The boot log prints a per-stage frame
 profile and per-decision inference timings, so performance work is
 measurable without instruments.
 
-**Other boards.** This repo supports those three boards, to keep the project small
+**Other boards.** This repo supports those four boards, to keep the project small
 while it is young. Two community ports run the tank elsewhere. They are not
 built or tested here, and they may lag behind this repo:
 
@@ -678,19 +790,21 @@ seven-minute prompt check before an overnight run is always worth it.
   `progression.c` (the long game, the sand dollars and persistence),
   `icons.c` (baked pixel art), `audio.c` (the sound mixer), `notice.c` (the
   milestone and low-battery announcements), `update.c` (the update pages
-  and their flow), `llm/` (4-bit engine, word
-  tokenizer, the shared encoder)
+  and their flow), `link.c` and `tank_link.c` (tanks side by side),
+  `passport.c`, `collection.c` and `gift.c` (visitors, the collection and
+  gifts), `llm/` (4-bit engine, word tokenizer, the shared encoder)
 - `sim/` — the LVGL + SDL2 simulator, its persistence port, and the self-tests
 - `firmware/` — ESP-IDF app: display, touch, battery, IMU, RTC and audio
-  ports for the three Waveshare boards, the on-device advisor scheduler,
-  update mode and its Wi-Fi port, the QEMU harness, and the partition table
+  ports for the four Waveshare boards, the on-device advisor scheduler,
+  update mode and its Wi-Fi port, the tank link's radio (ESP-NOW), the QEMU
+  harness, and the partition table
 - `model/` — the frozen [state/goal schema](model/schema.md), trace
   generation, training, evaluation, probes, and the 4-bit export
 - `installer/` — the browser installer page and the vendored ESP Web Tools
   bundle; `tools/make_installer.py` assembles the upload folder
 - `tools/` — the icon baker, the sound bank builder, the installer
   assembler, the release manifest maker, the touch calibration fitter, the
-  three-board picture sheet, and a serial bench client
+  four-board picture sheet, and a serial bench client
 - `assets/icons/` — the pixel-art source for the stats card, the badges,
   the shop and the snail
 - `assets/sounds/` — the cues (16 kHz mono) and their levels
@@ -707,11 +821,14 @@ seven-minute prompt check before an overnight run is always worth it.
 - [docs/retrain-v3.md](docs/retrain-v3.md) — the schema v3 retrain runbook
 - [docs/retrain-v4.md](docs/retrain-v4.md) — the schema v4 (boredom) retrain runbook and its numbers
 - [docs/DEVICE.md](docs/DEVICE.md) — what is in flight on the device, and the flash rule
-- [docs/BOARDS.md](docs/BOARDS.md) — the three boards: what is shared, where one may differ, how a release keeps each to its own image
+- [docs/BOARDS.md](docs/BOARDS.md) — the four boards: what is shared, where one may differ, how a release keeps each to its own image
 - [docs/board-amoled-1.75c.md](docs/board-amoled-1.75c.md) — the pendant's bring-up notes
 - [docs/board-amoled-2.06-watch.md](docs/board-amoled-2.06-watch.md) — the watch's bring-up notes
+- [docs/board-amoled-2.16.md](docs/board-amoled-2.16.md) — the square's bring-up notes
 - [docs/OTA.md](docs/OTA.md) — updates over Wi-Fi: the partition table, update mode, signing, the manifest
 - [docs/AUDIO.md](docs/AUDIO.md) — the sound design: the cues, the asset pipeline, the power rules
+- [docs/genetics-0.4.md](docs/genetics-0.4.md) — fish of every shape: the genes, heredity and the setup's FORM and COLORS pages
+- [docs/tank-link-0.4.md](docs/tank-link-0.4.md) — tanks side by side: the radio, visits, the passport, fry from two tanks and gifts
 - [docs/memory_budget.md](docs/memory_budget.md) — flash, PSRAM, and SRAM plan
 - [docs/bringup.md](docs/bringup.md) — hardware bring-up checklist
 
@@ -753,6 +870,10 @@ seven-minute prompt check before an overnight run is always worth it.
   updates over Wi-Fi with signed, per-board images, a sea urchin that keeps
   the grass down, a snail that cleans overnight, a sponge and scissors, and
   fish you can rename or sell
+- ✅ v0.4 (alpha): fish of every shape (three bodies, three sets of fins,
+  three kinds of markings or none, nine colors) that pass their looks on to
+  their fry, and tanks side by side: visits, a visitor collection, fry from
+  two tanks, and fish given to a friend
 - 🚧 Next: more to unlock: new fish species, more plants, corals, and more
   tank maintenance critters
 - 🚧 Next: more achievements and milestones
@@ -767,5 +888,17 @@ first boot on real glass, and the tank growing into a pet.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). `model/llama2.c/` and `sim/lvgl/` are cloned
-separately and carry their own MIT licenses.
+Pocket Tank is free. Use it, change it, build it on your own board and share
+it, for any noncommercial purpose. That covers keepers, hobbyists, schools
+and clubs.
+
+Selling it, or selling anything built on it (flashed boards, kits, a
+crowdfunding campaign), needs written permission first:
+strato@pocketank.com. Just ask.
+
+The terms are the [PolyForm Noncommercial License 1.0.0](LICENSE). Versions up
+to v0.3.9.2 were released under MIT and stay under it; see [NOTICE](NOTICE).
+`model/llama2.c/` and `sim/lvgl/` are cloned separately and carry their own
+MIT licenses.
+
+Want to send a pull request? Read [CONTRIBUTING.md](CONTRIBUTING.md) first.

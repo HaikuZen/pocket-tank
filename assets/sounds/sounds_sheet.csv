@@ -20,3 +20,4 @@ stage_up,fry -> juv -> adult -> elder,,"Level-up growth chime: a rising four-not
 "sleep, wake",BOOT press to drowse / wake,"wake plays after the codec is up, so ~100 ms into the boot","sleep: a soft descending three-note chiptune yawn that slows down, like a small device drifting off; about 600 ms, gentle, fades to silence. wake: the same three notes ascending, a bright fresh good-morning boop; about 500 ms, clean."
 low_battery,gauge crosses 15% once,once per discharge,"Subtle two-note descending warning boop, slightly hollow, like a small device politely asking to be charged. About 400 ms, not alarming, no bass."
 error,"save failed, reset prompt",,"Short flat error bonk: a single dull low-mid retro buzz followed by a quick double blip. About 300 ms, dry, nothing below 600 Hz."
+crab_find,the crab digs up a sand dollar (TEV_CRAB_FIND),"Strato's pick 2026-10-25: working-assets/sounds/achievement-money_edit.wav",

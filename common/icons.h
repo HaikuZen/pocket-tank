@@ -4,8 +4,31 @@
 #define POCKET_TANK_ICONS_H
 #include <stdint.h>
 
-typedef struct { uint8_t w, h; const uint16_t *rgb; const uint8_t *a; } icon_t;
+/* bits 1/2/4/8: px holds each pixel's index into pal (RGB565) / pa (alpha), packed LSB first;
+ * bits 0: a raw icon, pal = w*h RGB565 pixels, pa = w*h alphas (more than 256 pairs). */
+typedef struct { uint8_t w, h, bits; const uint16_t *pal; const uint8_t *pa; const uint8_t *px; } icon_t;
+static inline void icon_at(const icon_t *ic, int k, uint16_t *rgb, uint8_t *a) {   /* pixel k (row-major) */
+    unsigned v = (unsigned)k;
+    if (ic->bits) { unsigned b = ic->bits, bit = (unsigned)k * b; v = (ic->px[bit >> 3] >> (bit & 7)) & ((1u << b) - 1); }
+    *rgb = ic->pal[v]; *a = ic->pa[v];
+}
 
+extern const icon_t icon_bg_thumb_0;
+extern const icon_t icon_bg_thumb_1;
+extern const icon_t icon_bg_thumb_10;
+extern const icon_t icon_bg_thumb_2;
+extern const icon_t icon_bg_thumb_3;
+extern const icon_t icon_bg_thumb_4;
+extern const icon_t icon_bg_thumb_5;
+extern const icon_t icon_bg_thumb_6;
+extern const icon_t icon_bg_thumb_7;
+extern const icon_t icon_bg_thumb_8;
+extern const icon_t icon_bg_thumb_9;
+extern const icon_t icon_foot_close;
+extern const icon_t icon_foot_my_tanks;
+extern const icon_t icon_foot_passport;
+extern const icon_t icon_foot_sand_dollar;
+extern const icon_t icon_foot_settings;
 extern const icon_t icon_bold;
 extern const icon_t icon_cautious;
 extern const icon_t icon_curiosity;
@@ -19,6 +42,7 @@ extern const icon_t icon_stress;
 extern const icon_t icon_trust;
 extern const icon_t icon_unknown_16;
 extern const icon_t icon_unknown_24;
+extern const icon_t icon_ms_crab_find;
 extern const icon_t icon_ms_first_bubbles;
 extern const icon_t icon_ms_first_dart;
 extern const icon_t icon_ms_first_feeding;
@@ -26,26 +50,45 @@ extern const icon_t icon_ms_first_follow;
 extern const icon_t icon_ms_first_glass_cleaning;
 extern const icon_t icon_ms_first_hold_approach;
 extern const icon_t icon_ms_first_meal;
+extern const icon_t icon_ms_first_mutation;
 extern const icon_t icon_ms_first_play_session;
 extern const icon_t icon_ms_first_quiet_night;
 extern const icon_t icon_ms_first_reef;
+extern const icon_t icon_ms_first_sale;
 extern const icon_t icon_ms_first_seagrass;
 extern const icon_t icon_ms_first_trimming;
 extern const icon_t icon_ms_full_school;
 extern const icon_t icon_ms_sand_dollar;
+extern const icon_t icon_ms_seahorse_fed;
 extern const icon_t icon_ms_tank_changed_someone;
+extern const icon_t icon_settings_link;
+extern const icon_t icon_settings_updates;
+extern const icon_t icon_shop_breed;
 extern const icon_t icon_shop_castle;
 extern const icon_t icon_shop_cluster;
 extern const icon_t icon_shop_coral;
+extern const icon_t icon_shop_crab;
 extern const icon_t icon_shop_plant;
+extern const icon_t icon_shop_pumpkin;
 extern const icon_t icon_shop_sand_dollar_16;
 extern const icon_t icon_shop_sand_dollar_64;
+extern const icon_t icon_shop_seahorse;
 extern const icon_t icon_shop_shrimp;
 extern const icon_t icon_shop_snail;
+extern const icon_t icon_shop_tab_bg;
+extern const icon_t icon_shop_tab_decor;
+extern const icon_t icon_shop_tab_earn;
 extern const icon_t icon_shop_urchin;
+extern const icon_t icon_shop_volcano;
 extern const icon_t icon_snail_glass;
 extern const icon_t icon_snail_upright;
+extern const icon_t icon_tool_breed;
+extern const icon_t icon_tool_give;
 extern const icon_t icon_tool_scissors;
 extern const icon_t icon_tool_sponge;
+
+#define ICONS_N 73
+#define ICONS_PIXEL_HASH 0xfa969183u
+extern const icon_t *const icons_all[ICONS_N];   /* every icon, for the sim's check (the firmware's linker drops it) */
 
 #endif

@@ -42,8 +42,10 @@ def version_h():
     return rel, stage, tag, ln
 
 def release_num(s):
-    a, b, c = (list(map(int, s.split("."))) + [0, 0, 0])[:3]
-    return (a << 16) | (b << 8) | c
+    # four bytes, major.minor.patch.hotfix (common/version.h PT_RELEASE_NUM, 2026-10-21;
+    # three bytes until 0.3.8 - every four-byte number is larger than every old one)
+    a, b, c, d = (list(map(int, s.split("."))) + [0, 0, 0, 0])[:4]
+    return (a << 24) | (b << 16) | (c << 8) | d
 
 def git(*args):
     try: return subprocess.check_output(["git", "-C", ROOT, *args], stderr=subprocess.DEVNULL, text=True).strip()

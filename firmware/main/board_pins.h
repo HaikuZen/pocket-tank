@@ -25,6 +25,31 @@
  * switch. PWR key sense on GPIO 10 (SYS_OUT), an SD slot (1/2/3/17) and a
  * vibration motor (GPIO 18, fed from ALDO3) the tank does not use.
  *
+ * Waveshare ESP32-S3-Touch-AMOLED-2.16, the SQUARE (2026-10-12; 480x480
+ * CO5300 + CST9220, a desk box with the USB at its foot). Sources:
+ * resources/ESP32-S3-Touch-AMOLED-2.16/ (schematic, wiki page) and Waveshare's
+ * BSP (waveshare/esp32_s3_touch_amoled_2_16: the init sequence, the touch
+ * driver = the 1.75C's CST9217 family). No expander: resets on GPIOs 39 / 40;
+ * the clock on 38 like the 1.75C; an ES7210 and an RTC like the watch - the
+ * same I2C signature, so it is told from the watch by its touch chip
+ * (CST92xx at 0x5A, the watch's FT3168 at 0x38). The panel's 3V3 is VCC3V3
+ * (no rail to cut, as the 1.75C) with DSI_PWR_EN pulled up. Audio pins as the
+ * 1.8's but the master clock on GPIO 42 (16 is SYS_OUT, the PWR key sense).
+ *
+ * Waveshare ESP32-S3-Touch-AMOLED-1.75 (and -B, the same board in a plastic
+ * case; -G adds a GPS), 2026-10-17, BETA - no board on the bench: a keeper
+ * (Bryan) has the -B. Sources: resources/ESP32-S3-Touch-AMOLED-1.75/ (the
+ * schematic's GPIO table) and Waveshare's HARDWARE_REFERENCE for it. The
+ * 1.75C's panel (CO5300 466 round) and touch (CST9217 at 0x5A, INT 11) with
+ * the clock on 38, but its resets on 39 / 40 (the square's numbers; 1 / 2 / 3
+ * are an SD slot here), a TCA9554 at 0x20 like the 1.8's - P3 RTC_INT,
+ * P4 SYS_OUT (the PWR key sense), P5 AXP_IRQ, P6 QMI_INT1, P7 GPS_RST, all
+ * inputs: no resets on it - an RTC (PCF85063) unlike the 1.75C, an ES7210
+ * on A3V3 = ALDO1 (the 1.75C's trap: off, it clamps the bus) and the audio
+ * master clock on 42. Told from the 1.8 by the ES7210: expander + ES7210.
+ * Before this, the board took the 1.8's path: wrong clock pin, its panel
+ * reset never driven, and the 1.8's rail trim cut ALDO1 - a dark glass.
+ *
  * The Freenove FNK0115 (2026-10-14) is not told apart at boot: it has its own
  * build (CONFIG_POCKET_TANK_FNK0115, TANK_WIDE) and its own display port,
  * display_port_rgb.c - its pins are at the foot of this file.
@@ -34,7 +59,9 @@
  * display port, display_port_dsi.c. */
 #ifndef BOARD_PINS_H
 #define BOARD_PINS_H
+#if __has_include("sdkconfig.h")             /* (the sim's touch selftest builds the touch port on the host: no sdkconfig) */
 #include "sdkconfig.h"
+#endif
 #define PIN_LCD_CS        12
 #define PIN_LCD_PCLK      11
 #define PIN_LCD_DATA0     4
@@ -59,7 +86,8 @@
 #define R_PIN_TP_INT      11
 #define R_PIN_IMU_INT1    21       /* unused */
 #define R_PIN_PWR_SENSE   3        /* SYS_OUT: high while the PWR key is down (unused: the PMIC is asked, as on the 1.8) */
-#define I2C_ADDR_ES7210   0x40     /* the microphone ADC (probe, with no expander => the 1.75C) */
+#define I2C_ADDR_ES7210   0x40     /* the microphone ADC (probe, with no expander => the 1.75C). Its BASE: AD0 / AD1 put it at 0x40 + 0..3
+                                      (a 1.75C rev 1.1 answers at 0x42) - the probe tries all four (board_probe.h), board_es7210_addr() says which */
 #define I2C_ADDR_CST9217  0x5A
 #define R_PANEL           466      /* round: 466 across, the corners of the square are not there */
 #define R_PANEL_X_GAP     6
@@ -77,6 +105,23 @@
 #define W_PANEL_W         410      /* native portrait */
 #define W_PANEL_H         502
 #define W_PANEL_X_GAP     0x16
+
+/* ---- the 2.16 square ---- */
+#define S_PIN_LCD_PCLK    38
+#define S_PIN_LCD_RST     39
+#define S_PIN_TP_RST      40
+#define S_PIN_TP_INT      11       /* unused: polled */
+#define S_PIN_LCD_TE      13       /* unused (the RTC's INT shares the number on the wiki table: TE is on the panel header) */
+#define S_PIN_PWR_SENSE   16       /* SYS_OUT: high while the PWR key is down */
+#define S_PIN_I2S_MCLK    42
+#define S_PIN_KEY3        18       /* the user button (unused) */
+#define S_PANEL           480
+#define S_PANEL_X_GAP     0
+
+/* ---- the 1.75 / 1.75-B (expander, RTC, SD slot): the 1.75C's panel otherwise ---- */
+#define B_PIN_LCD_RST     39
+#define B_PIN_TP_RST      40
+#define B_PIN_I2S_MCLK    42
 
 /* ---- the Freenove FNK0115 (2026-10-14; its own build, TANK_WIDE) ----
  * The IPS variants, FNK0115L (4.3") and FNK0115Q (5.0"): an 800 x 480 RGB565

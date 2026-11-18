@@ -5,6 +5,8 @@
 #include "tank.h"
 #include "version.h"
 #include "progression.h"     /* version_port_string */
+#include "touch_gate.h"
+#include "wifi_nets.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -14,11 +16,15 @@
 #define C_EDGE   0x9fd8e2
 #define C_INNER  0x1c2f36
 #define C_DIM    0x2a3f45
+#define C_QUIET  0x7f9aa1     /* quiet TEXT (render.c MSP_QUIET, 0.3.9.1: C_DIM text was too dark to read); C_DIM stays for shapes */
 #define C_KEY    0x0e2229
 #define C_TEXT   0xffffff
 #define C_CAPT   0x9fd8e2
 #define C_GO     0x155e58
 #define C_GO_E   0x38dcc7
+#define C_FILL   0x2f7f8a     /* a hold filling (REMOVE's deep teal: the white words read on it and on C_GO) */
+_Static_assert(UPD_CLOSE_W == MSP_CLOSE_W && UPD_CLOSE_H == SET_NAV_SQ, "the UPDATES page's BACK is the GRAPHICS page's box: render_settings_from_updates reads its footprint there");
+#define UPD_HOLD_S 1.0f
 #define C_WARN   0xf2b65b     /* amber: never the only signal (Strato is color blind) */
 
 /* the panel the setup uses: inside the bezel curve */
@@ -154,46 +160,158 @@ static bool in_box(float x, float y, int bx, int by, int bw, int bh, int slop) {
  * 1. THE UPDATES PAGE in the tank (no radio)
  * ==================================================================== */
 
+/* FORGET NETWORK ARMS (0.4.1 audit round 1, TCH-10; Strato 11-05: "fix this, give a confirmation 'sure?'"): one tap
+   forgot the saved Wi-Fi, and with it the morning clock check and the night's power-off on a board with no clock chip.
+   Now the first tap arms it - the button says SURE? - and a second tap forgets, the way the keeper card's SELL arms:
+   not within OPEN_WAIT_US of the tap before it, read at the second tap's press (a double tap, a mash or a firm second
+   press is spent: touch_gate.h THE TOUCH RULE, no restart). Any other release on the page, or the page
+   opening again, disarms it. */
+/* THREE NETWORKS (0.4.2, wifi_nets.h): a row each, in the order the tank tries them, each with its own FORGET that
+   arms and forgets the same way - the row armed is the one that says SURE?, and a tap on another row's FORGET arms
+   that one instead (never forgets the first). The network is forgotten by the NAME that was armed. The one the tank
+   was on last has a check mark before its name and LAST USED under it (a shape and words, never a color alone; the
+   radio is off in the tank, so no network is ever "connected" on this page). */
+/* ARMED BY NAME (0.4.2 review): the name whose FORGET says SURE?, "" = none. Its row is looked up each time, so a
+   list that changes under the page (the director's wifi set / forget) moves SURE? with its network, and a network
+   that has left the list is not armed any more */
+static int64_t s_forget_at; static char s_forget_ssid[NET_SSID_MAX + 1];
+/* THE TWO FACES (0.4.2, update.h): UPDATES, and WI-FI behind its door. s_face_at: when the face last turned by a tap -
+   a press that begins within OPEN_WAIT_US of it is the turning tap's double (no tap; nothing waits, nothing restarts) */
+static bool s_nets; static int64_t s_face_at; static bool s_face_on;
+void updates_page_open(void) { s_forget_ssid[0] = 0; s_nets = false; s_face_on = false; }
+void updates_page_show_nets(bool on) { s_nets = on; s_forget_ssid[0] = 0; s_face_on = false; }
+bool updates_page_nets(void) { return s_nets; }
+int  updates_forget_row(void) {
+    if (!s_forget_ssid[0]) return -1;
+    const int r = wifi_nets_find(net_port_nets(), s_forget_ssid);
+    if (r < 0) s_forget_ssid[0] = 0;
+    return r;
+}
+bool updates_forget_armed(void) { return updates_forget_row() >= 0; }
+static void check_mark(uint16_t *fb, int stride, int x, int y, uint32_t rgb) {   /* 15 x 13, beside a size-2 line */
+    static const int8_t CK[7][2] = { { 0, 6 }, { 2, 8 }, { 4, 10 }, { 6, 8 }, { 8, 6 }, { 10, 4 }, { 12, 2 } };
+    for (int k = 0; k < 7; k++) render_rect(fb, stride, x + CK[k][0], y + CK[k][1], 3, 3, rgb);
+}
+static void wifi_mark(uint16_t *fb, int stride, int cx, int by, uint32_t rgb) {   /* the door's picture: a dot and two arcs over it, 27 x 15 */
+    for (int dy = -14; dy <= 0; dy++) for (int dx = -14; dx <= 14; dx++) {
+        const int r2 = dx * dx + dy * dy;
+        const bool dot = r2 <= 5, fan = (dx < 0 ? -dx : dx) <= -dy + 1;
+        if (dot || (fan && ((r2 >= 36 && r2 <= 72) || (r2 >= 132 && r2 <= 196)))) render_rect(fb, stride, cx + dx, by + dy, 1, 1, rgb);
+    }
+}
+static void page_title(uint16_t *fb, int stride, const char *s) { text_c(fb, stride, SET_TITLE_Y, 3, C_TEXT, s); }
+static void page_back(uint16_t *fb, int stride) { render_button(fb, stride, UPD_CLOSE_X, UPD_CLOSE_Y, UPD_CLOSE_W, UPD_CLOSE_H, C_INNER, C_EDGE, "BACK", 2); }
+int updates_info_fit(const char *label, const char *value, char *out, size_t cap) {
+    const int right = UPD_X + UPD_W;
+    snprintf(out, cap, "%s", value);
+    if (UPD_VAL_X + render_text_w(out, 2) <= right) return UPD_VAL_X;          /* in the column */
+    const int min_x = UPD_X + render_text_w(label, 2) + 14;
+    wifi_name_fit(out, cap, value, (right - min_x + 2) / 12);                 /* (a size-2 letter: 12 px, the last one 10) */
+    return right - render_text_w(out, 2);
+}
+static void info_row(uint16_t *fb, int stride, int row, const char *label, const char *value) {
+    char shown[40]; const int x = updates_info_fit(label, value, shown, sizeof shown);
+    render_text(fb, stride, UPD_X, UPD_INFO_Y + row * UPD_INFO_DY, 2, C_CAPT, label);
+    render_text(fb, stride, x, UPD_INFO_Y + row * UPD_INFO_DY, 2, C_TEXT, shown);
+}
+static void render_nets_face(uint16_t *fb, int stride) {
+    page_title(fb, stride, "WI-FI");
+    const int armed = updates_forget_row();
+    const wifi_nets_t *w = net_port_nets(); const int nets = w->n;
+    const int ty = (UPD_NET_H - 14) / 2;                               /* a size-2 line in the middle of a row */
+    for (int i = 0; i < WIFI_NETS_MAX; i++) {
+        const int y = UPD_NET_Y0 + i * UPD_NET_DY;
+        if (i >= nets) {                                               /* an open place */
+            render_rect_edge(fb, stride, UPD_X, y, UPD_W, UPD_NET_H, C_INNER);
+            render_text(fb, stride, UPD_NAME_X, y + ty, 2, C_QUIET, "EMPTY");
+            continue;
+        }
+        render_rect(fb, stride, UPD_X, y, UPD_W, UPD_NET_H, C_PANEL); render_rect_edge(fb, stride, UPD_X, y, UPD_W, UPD_NET_H, C_INNER);
+        char shown[UPD_NAME_CHARS + 1]; wifi_name_fit(shown, sizeof shown, w->net[i].ssid, UPD_NAME_CHARS);
+        update_text(fb, stride, UPD_NAME_X, y + ty, 2, C_TEXT, shown);
+        if (i == 0 && w->net[0].joined) check_mark(fb, stride, UPD_X + 8, y + ty, C_TEXT);
+        if (armed == i) render_button(fb, stride, UPD_FORGET_X, y, UPD_FORGET_W, UPD_FORGET_H, C_GO, C_GO_E, "SURE?", 2);
+        else render_button(fb, stride, UPD_FORGET_X, y, UPD_FORGET_W, UPD_FORGET_H, C_INNER, C_DIM, "FORGET", 2);
+    }
+    if (nets && w->net[0].joined) {                                    /* what the mark means, in words */
+        check_mark(fb, stride, UPD_X + 8, UPD_LEGEND_Y, C_QUIET);
+        render_text(fb, stride, UPD_NAME_X, UPD_LEGEND_Y, 2, C_QUIET, "LAST USED");
+    }
+    render_button(fb, stride, UPD_X, UPD_ADD_Y, UPD_W, UPD_BTN40, C_GO, C_GO_E, "ADD A NETWORK", 2);
+    page_back(fb, stride);
+}
 void render_updates_page(uint16_t *fb, int stride) {
     page_bg(fb, stride);
-    text_c(fb, stride, 14, 3, C_TEXT, "UPDATES");
+    if (s_nets) { render_nets_face(fb, stride); return; }
+    page_title(fb, stride, "UPDATES");
     char line[64];
-    snprintf(line, sizeof line, "VERSION %s %s", PT_RELEASE, PT_RELEASE_STAGE);
-    render_text(fb, stride, 32, 62, 2, C_TEXT, line);
-    snprintf(line, sizeof line, "BUILD %s", version_port_string());
-    render_text(fb, stride, 32, 84, 2, C_DIM, line);
-    char ssid[NET_SSID_MAX + 1], pass[NET_PASS_MAX + 1];
-    if (net_port_creds_get(ssid, pass)) {
-        render_text(fb, stride, 32, 122, 2, C_CAPT, "NETWORK");
-        update_text(fb, stride, 32 + render_text_w("NETWORK", 2) + 14, 122, 2, C_TEXT, ssid);
-    } else render_text(fb, stride, 32, 122, 2, C_CAPT, "NO NETWORK SAVED YET");
-    render_text(fb, stride, 32, 152, 2, C_DIM, "THE TANK PAUSES FOR A MOMENT");
-    render_text(fb, stride, 32, 174, 2, C_DIM, "AND COMES BACK BY ITSELF");
+    snprintf(line, sizeof line, "%s %s", PT_RELEASE, PT_RELEASE_STAGE);
+    info_row(fb, stride, 0, "VERSION", line);
+    info_row(fb, stride, 1, "BUILD", version_port_string());
+    /* 0.4.1: the code a keeper gives Turbo (/crew add), and once the crew
+       check said yes, the words say so (never the color alone) */
+    char code[NET_CODE_LEN + 1];
+    if (net_port_board_code(code)) info_row(fb, stride, 2, net_port_crew() ? "HATCHERY CREW" : "BOARD CODE", code);
     render_button(fb, stride, UPD_CHECK_X, UPD_CHECK_Y, UPD_CHECK_W, UPD_CHECK_H, C_GO, C_GO_E, "CHECK FOR UPDATES", 2);
-    if (net_port_creds_get(ssid, pass))
-        render_button(fb, stride, UPD_FORGET_X, UPD_FORGET_Y, UPD_FORGET_W, UPD_FORGET_H, C_INNER, C_DIM, "FORGET NETWORK", 2);
-    render_button(fb, stride, UPD_CLOSE_X, UPD_CLOSE_Y, UPD_CLOSE_W, UPD_CLOSE_H, C_INNER, C_EDGE, "CLOSE", 2);
+    render_text(fb, stride, UPD_X, UPD_TEXT_Y, 2, C_QUIET, "WHILE UPDATING, THE BOARD");      /* Strato's words, 2026-11-04 */
+    render_text(fb, stride, UPD_X, UPD_TEXT_Y + 20, 2, C_QUIET, "PAUSES AND REBOOTS ITSELF");
+    {   /* THE WI-FI DOOR: a settings tile across the page - the picture, a small name over what is saved, the arrow that says it opens */
+        const int nets = net_port_creds_count(), y = UPD_DOOR_Y;
+        render_button(fb, stride, UPD_X, y, UPD_W, UPD_DOOR_H, C_INNER, C_DIM, "", 2);
+        wifi_mark(fb, stride, UPD_X + 25, y + 28, C_EDGE);
+        if (!nets) snprintf(line, sizeof line, "NO NETWORK SAVED");
+        else snprintf(line, sizeof line, "%d NETWORK%s SAVED", nets, nets == 1 ? "" : "S");
+        render_text(fb, stride, UPD_X + 50, y + 6, 1, C_QUIET, "WI-FI");
+        render_text(fb, stride, UPD_X + 50, y + 18, 2, C_TEXT, line);
+        for (int i = 0; i < 7; i++) render_rect(fb, stride, UPD_X + UPD_W - 19 + i, y + UPD_DOOR_H / 2 - (6 - i), 1, 2 * (6 - i) + 1, C_EDGE);
+    }
+    page_back(fb, stride);
 }
+/* the taps. BACK: the settings foot's band (no reach above it, 14 under, 12 to each side - the GRAPHICS page's BACK);
+   the wide buttons 8 px out; a FORGET 8 to the sides and 3 up and down (half the gap to the next row's) */
 int updates_page_tap(float x, float y) {
     x -= PAGE_X; y -= PAGE_Y;                           /* the page's own coordinates (render.h) */
-    if (x >= UPD_CLOSE_X - 8 && y >= UPD_CLOSE_Y - 4) return UPD_TAP_CLOSE;
-    if (in_box(x, y, UPD_CHECK_X, UPD_CHECK_Y, UPD_CHECK_W, UPD_CHECK_H, 8)) return UPD_TAP_CHECK;
-    char ssid[NET_SSID_MAX + 1], pass[NET_PASS_MAX + 1];
-    if (in_box(x, y, UPD_FORGET_X, UPD_FORGET_Y, UPD_FORGET_W, UPD_FORGET_H, 8) && net_port_creds_get(ssid, pass)) return UPD_TAP_FORGET;
+    if (y >= UPD_CLOSE_Y && y < UPD_CLOSE_Y + UPD_CLOSE_H + 14 && x >= UPD_CLOSE_X - 12 && x < UPD_CLOSE_X + UPD_CLOSE_W + 12)
+        return s_nets ? UPD_TAP_NETS_BACK : UPD_TAP_CLOSE;
+    if (!s_nets) {
+        if (in_box(x, y, UPD_CHECK_X, UPD_CHECK_Y, UPD_CHECK_W, UPD_CHECK_H, 8)) return UPD_TAP_CHECK;
+        if (in_box(x, y, UPD_X, UPD_DOOR_Y, UPD_W, UPD_DOOR_H, 8)) return UPD_TAP_NETS;
+        return UPD_TAP_NONE;
+    }
+    if (in_box(x, y, UPD_X, UPD_ADD_Y, UPD_W, UPD_BTN40, 8)) return UPD_TAP_ADD;
+    if (x >= UPD_FORGET_X - 8 && x < UPD_FORGET_X + UPD_FORGET_W + 8 && y >= UPD_FORGET_Y - 3 && y < UPD_FORGET_Y + WIFI_NETS_MAX * UPD_NET_DY) {
+        const int r = (int)(y - (UPD_FORGET_Y - 3)) / UPD_NET_DY;                       /* a saved network's FORGET, its own row's */
+        if (y < UPD_FORGET_Y + r * UPD_NET_DY + UPD_FORGET_H + 3 && r < net_port_creds_count()) return UPD_TAP_FORGET + r;
+    }
     return UPD_TAP_NONE;
 }
-int updates_page_touch(float x, float y, bool down) {
-    static bool s_down; static float s_px, s_py, s_lx, s_ly; static int s_hit;
+static bool s_down; static float s_px, s_py, s_lx, s_ly; static int s_hit; static int64_t s_press_us;   /* updates_page_touch's press in hand */
+/* A PRESS CUT (0.4.1 audit round 2, R2T-3): the port calls this on every poll it does not feed the page (the gift card over it,
+   the page closed by BOOT twice or a birth) - the press is forgotten, so the next feed's "up" is no release of it (CHECK FOR
+   UPDATES fired as the card went, or the next time the page opened). An armed SURE? stays armed: only the press goes */
+void updates_page_cancel(void) { s_down = false; s_hit = UPD_TAP_NONE; }
+int updates_page_touch(float x, float y, bool down, int64_t now_us) {
     int r = UPD_TAP_NONE;
     if (down) { s_lx = x; s_ly = y; }
-    if (down && !s_down) { s_px = x; s_py = y; s_hit = updates_page_tap(x, y); }
-    else if (!down && s_down) {
+    if (down && !s_down) {
+        s_px = x; s_py = y; s_hit = updates_page_tap(x, y); s_press_us = now_us;
+        if (s_face_on && hold_spent_us_at(&s_face_at, now_us, now_us, OPEN_WAIT_US)) s_hit = UPD_TAP_NONE;   /* the face just turned: its tap's double */
+    } else if (!down && s_down) {
         x = s_lx; y = s_ly;
         int h = updates_page_tap(x, y);
         float dx = x - s_px, dy = y - s_py;
-        if (h && h == s_hit && dx * dx + dy * dy < 24 * 24) {
-            r = h;
-            if (r == UPD_TAP_FORGET) net_port_creds_forget();
+        const bool tap = h && h == s_hit && dx * dx + dy * dy < 24 * 24;
+        if (tap && h >= UPD_TAP_FORGET) {
+            const int row = h - UPD_TAP_FORGET;
+            if (updates_forget_row() != row) {                                        /* SURE? - on this row's network (another's goes out) */
+                if (net_port_creds_at(row, s_forget_ssid, NULL)) s_forget_at = now_us; else s_forget_ssid[0] = 0;
+            } else if (!hold_spent_us_at(&s_forget_at, s_press_us, now_us, OPEN_WAIT_US)) {   /* (spent: the tap before's double) */
+                net_port_creds_forget_one(s_forget_ssid); s_forget_ssid[0] = 0; r = h;   /* this one; the others stay, in their order */
+            }
+        } else {
+            s_forget_ssid[0] = 0;                                                    /* anything else: not armed */
+            if (tap) r = h;
+            if (r == UPD_TAP_NETS || r == UPD_TAP_NETS_BACK) { s_nets = r == UPD_TAP_NETS; s_face_at = now_us; s_face_on = true; }   /* the face turns */
         }
     }
     s_down = down;
@@ -204,9 +322,11 @@ int updates_page_touch(float x, float y, bool down) {
  * 2. UPDATE MODE
  * ==================================================================== */
 enum { STEP_NONE = 0, STEP_POWER, STEP_SCANNING, STEP_LIST, STEP_PASSWORD, STEP_CONNECTING, STEP_CHECKING,
-       STEP_OFFER, STEP_UP_TO_DATE, STEP_INSTALLING, STEP_MESSAGE, STEP_RESTART };
+       STEP_OFFER, STEP_UP_TO_DATE, STEP_INSTALLING, STEP_MESSAGE, STEP_RESTART,
+       STEP_SEEKING };                       /* 0.4.2: the saved network tried is not in range - a scan, for the other saved ones */
 /* what the message page's buttons do */
-enum { ACT_NONE = 0, ACT_RETRY_CONNECT, ACT_RETYPE, ACT_SCAN, ACT_RETRY_CHECK, ACT_RETRY_INSTALL };
+enum { ACT_NONE = 0, ACT_RETRY_CONNECT, ACT_RETYPE, ACT_SCAN, ACT_RETRY_CHECK, ACT_RETRY_INSTALL,
+       ACT_REPLACE_OK, ACT_LIST };           /* 0.4.2, THREE NETWORKS SAVED: on with the network picked / back to the list */
 /* hit ids */
 enum { HIT_NONE = 0, HIT_BACK, HIT_CANCEL, HIT_RESCAN, HIT_YES, HIT_NO, HIT_PRIMARY, HIT_SECONDARY, HIT_TERTIARY,
        HIT_PG_UP, HIT_PG_DOWN, HIT_ROW0 = 200, HIT_KEY0 = 100 };
@@ -214,9 +334,12 @@ enum { HIT_NONE = 0, HIT_BACK, HIT_CANCEL, HIT_RESCAN, HIT_YES, HIT_NO, HIT_PRIM
 static struct {
     int  step, outcome, page;
     int  battery_pct; bool on_power;
+    bool add;                                /* 0.4.2: begun by ADD A NETWORK (update_begin_add), not CHECK FOR UPDATES - the PLUG IN page's words */
     char ssid[NET_SSID_MAX + 1], pass[NET_PASS_MAX + 1];
     bool saved;                              /* the network came from the store */
     bool secured;
+    bool fresh;                              /* the network picked is not the one last typed for: its keyboard starts empty */
+    bool sought; wifi_names_t tried;         /* 0.4.2: the scan for the saved networks has run; the ones tried SINCE that scan, by name */
     net_ap_t aps[NET_SCAN_MAX]; int n_aps, list_page;
     update_manifest_t m; bool have_m;
     int  percent;
@@ -229,6 +352,7 @@ static struct {
     /* the finger: the press, and the LAST position while down - a release
        reports no position on the device, the tank's touch port does the same */
     bool down; float px, py, lx, ly; int hit;
+    float hold_t0; bool holding;             /* the OFFER's UPDATE held (Strato 11-06: an install has no way back - a 1 s hold, not a tap) */
 } s;
 
 /* ---- the keyboard ----
@@ -296,7 +420,7 @@ static void draw_keyboard(uint16_t *fb, int stride) {
         }
     }
 }
-static void draw_field(uint16_t *fb, int stride, float clock) {    /* the typed passphrase, its tail if long, a cursor */
+static void draw_field(uint16_t *fb, int stride, double clock) {    /* the typed passphrase, its tail if long, a cursor */
     render_rect(fb, stride, UX, FIELD_Y, UW, FIELD_H, C_PANEL); render_rect_edge(fb, stride, UX, FIELD_Y, UW, FIELD_H, C_INNER);
     const char *p = s.pass; size_t n = strlen(p);
     char shown[FIELD_VISIBLE + 2];
@@ -305,12 +429,12 @@ static void draw_field(uint16_t *fb, int stride, float clock) {    /* the typed 
     update_text(fb, stride, x, y, 2, C_TEXT, p);
     if ((int)(clock * 2) & 1) render_rect(fb, stride, x + update_text_w(p, 2) + (*p ? 4 : 0), y, 2, 14, C_EDGE);
     char count[12]; snprintf(count, sizeof count, "%d", (int)n);
-    render_text(fb, stride, UX + UW - render_text_w(count, 1) - 8, FIELD_Y - 10, 1, C_DIM, count);
+    render_text(fb, stride, UX + UW - render_text_w(count, 1) - 8, FIELD_Y - 10, 1, C_QUIET, count);
 }
 
 /* ---- the pages ---- */
 
-static void go(int step, int page) { s.step = step; s.page = page; s.t = 0; s.hit = HIT_NONE; }
+static void go(int step, int page) { s.step = step; s.page = page; s.t = 0; s.hit = HIT_NONE; s.holding = false; }
 /* the message page: a title, two lines, up to three actions (row A: primary
  * left, secondary right; row B: tertiary left) and BACK TO TANK (row B,
  * right when a tertiary sits beside it, else centred) */
@@ -324,6 +448,8 @@ static void message3(const char *title, const char *l1, bool l1_ascii, const cha
     go(STEP_MESSAGE, UPD_PG_MESSAGE);
 }
 const char *update_message_title(void) { return s.title; }
+const char *update_message_line1(void) { return s.line1; }
+const char *update_ssid(void) { return s.ssid; }
 /* a message's first action: beside its second, or centred on its own over a
  * centred BACK TO TANK (2026-10-03, Strato on the watch's ODD ANSWER: a lone
  * TRY AGAIN in the left slot "doesn't look right") */
@@ -342,6 +468,26 @@ static void start_connect(void) { net_port_connect_start(s.ssid, s.pass); go(STE
 static void start_check(void)   { net_port_check_start(); s.have_m = false; go(STEP_CHECKING, UPD_PG_BUSY); busy("CHECKING FOR UPDATES"); }
 static void start_install(void) { net_port_install_start(); go(STEP_INSTALLING, UPD_PG_BUSY); busy("DOWNLOADING"); s.percent = 0; }
 static void leave(int outcome)  { s.outcome = outcome; s.step = STEP_NONE; }
+static void type_password(bool fresh);
+/* SEVERAL SAVED NETWORKS (0.4.2, wifi_nets.h). The one used last is tried first, straight away, as when the tank
+ * kept one - nothing is slower for it. Only when it is NOT IN RANGE does the tank look (one scan) and join the
+ * first of its list that the radio sees; one seen that still does not answer is passed over for the next; one that
+ * refuses its password stops there with NOT ACCEPTED (TYPE IT AGAIN is the way on). None left: NO SIGNAL.
+ * The try BEFORE the scan is not held against the one used last: a first sweep misses a router now and then, and
+ * if the scan then hears it, it is tried once more (it is first in the list) before the others. */
+static void seek_pick(void) {
+    if (net_port_scan_saved(&s.tried, s.ssid, s.pass) >= 0) { s.secured = s.pass[0] != 0; start_connect(); return; }
+    net_port_creds_get(s.ssid, s.pass); s.secured = s.pass[0] != 0;   /* TRY AGAIN starts over, from the one used last */
+    s.sought = false; wifi_names_clear(&s.tried);
+    message("NO SIGNAL", "NO SAVED NETWORK", false, "IS IN RANGE", "TRY AGAIN", ACT_RETRY_CONNECT, "OTHER NETWORK", ACT_SCAN);
+}
+static void seek_next(void) {
+    if (s.sought) { wifi_names_add(&s.tried, s.ssid); seek_pick(); return; }   /* (the scan's answer stands for the rest of the list) */
+    s.sought = true; wifi_names_clear(&s.tried);
+    net_port_scan_start(); go(STEP_SEEKING, UPD_PG_BUSY); busy("LOOKING FOR NETWORKS");
+}
+/* the network picked from the list: its keyboard, or straight on if it is open */
+static void picked_go(void) { if (s.secured) type_password(s.fresh); else { s.pass[0] = 0; start_connect(); } }
 /* the keyboard, keeping what was typed for this network (a stray BACK or a
  * refused try must not cost a long passphrase); fresh = start empty */
 static void type_password(bool fresh) {
@@ -372,24 +518,33 @@ void update_debug_keyboard(void) {
     snprintf(s.ssid, sizeof s.ssid, "calibration"); s.secured = true; s.saved = false;
     type_password(true);
 }
-void update_begin(int battery_pct, bool on_power) {
+static void begin(int battery_pct, bool on_power, bool add) {
     memset(&s, 0, sizeof s);
-    s.battery_pct = battery_pct; s.on_power = on_power;
+    s.battery_pct = battery_pct; s.on_power = on_power; s.add = add;
     if (!on_power && battery_pct >= 0 && battery_pct < UPD_BATTERY_MIN_PCT) { go(STEP_POWER, UPD_PG_POWER); return; }
-    if (net_port_creds_get(s.ssid, s.pass)) { s.saved = true; s.secured = s.pass[0] != 0; start_connect(); }
+    if (!add && net_port_creds_get(s.ssid, s.pass)) { s.saved = true; s.secured = s.pass[0] != 0; start_connect(); }
     else start_scan();
 }
+void update_begin(int battery_pct, bool on_power) { begin(battery_pct, on_power, false); }
+/* ADD A NETWORK (0.4.2, the WI-FI page): the wizard from its list, whatever is saved - the page OTHER NETWORK always led
+   to. A fourth still says THREE NETWORKS SAVED first; one already saved takes the new password and no new place */
+void update_begin_add(int battery_pct, bool on_power) { begin(battery_pct, on_power, true); }
 bool update_active(void) { return s.step != STEP_NONE; }
 int  update_outcome(void) { return s.outcome; }
 int  update_page(void) { return s.page; }
 const char *update_typed(void) { return s.pass; }
+/* the PLUG IN page's words. ADD A NETWORK is behind the same battery gate (the radio is the cost, not the download), but it
+   is no update: its page does not say UPDATE (the 0.4.2 review; "ADDING A NETWORK NEEDS THE CABLE IN" is 418 px, wider
+   than the watch's glass) */
+const char *update_power_title(void) { return s.add ? "PLUG IN FIRST" : "PLUG IN TO UPDATE"; }
+const char *update_power_line(void)  { return s.add ? "THIS NEEDS THE CABLE IN" : "AN UPDATE NEEDS THE CABLE IN"; }
 
 static void fail(int err) {
     switch (err) {
     case NET_ERR_NO_SIGNAL: message("NO SIGNAL", s.ssid, true, "IS NOT IN RANGE", "TRY AGAIN", ACT_RETRY_CONNECT, "OTHER NETWORK", ACT_SCAN); break;
-    case NET_ERR_PASSWORD:  message3("NOT ACCEPTED", s.ssid, true, "REFUSED THE PASSWORD. SOME ROUTERS",
-                                     "TRY AGAIN", ACT_RETRY_CONNECT, "TYPE IT AGAIN", ACT_RETYPE, "OTHER NETWORK", ACT_SCAN);
-                            snprintf(s.line2, sizeof s.line2, "REFUSE THE FIRST TRIES. TRY AGAIN?"); break;
+    case NET_ERR_PASSWORD:  message3("NOT ACCEPTED", s.ssid, true, "DID NOT TAKE THE PASSWORD",   /* (0.4.2: it said "<name> / REFUSE THE FIRST TRIES. TRY AGAIN?",
+                                        34 letters - wider than the watch's glass; TRY AGAIN is still the first button, for the routers that refuse a first try) */
+                                     "TRY AGAIN", ACT_RETRY_CONNECT, "TYPE IT AGAIN", ACT_RETYPE, "OTHER NETWORK", ACT_SCAN); break;
     case NET_ERR_NO_NET:    message("NO ANSWER", "THE UPDATE SERVER DID NOT", false, "ANSWER. IS THE INTERNET UP?", "TRY AGAIN", ACT_RETRY_CHECK, "OTHER NETWORK", ACT_SCAN); break;
     case NET_ERR_BAD_MANIFEST: message("ODD ANSWER", "THE UPDATE SERVER SENT", false, "SOMETHING THIS TANK CANNOT READ", "TRY AGAIN", ACT_RETRY_CHECK, NULL, 0); break;
     case NET_ERR_DOWNLOAD:  message("DOWNLOAD STOPPED", "NOTHING HAS CHANGED", false, "", "TRY AGAIN", ACT_RETRY_INSTALL, NULL, 0); break;
@@ -408,10 +563,22 @@ static void act(int a) {
     case ACT_SCAN:          start_scan(); break;
     case ACT_RETRY_CHECK:   start_check(); break;
     case ACT_RETRY_INSTALL: start_install(); break;
+    case ACT_REPLACE_OK:    picked_go(); break;
+    case ACT_LIST:          if (s.n_aps) go(STEP_LIST, UPD_PG_SCAN); else start_scan(); break;
     default:                leave(UPD_BACK); break;
     }
 }
 static bool newer(const update_manifest_t *m) { return m->release_num > (uint32_t)PT_RELEASE_NUM; }
+/* the board whose version this tank should run (0.3.9.3): the board it IS, by
+ * the boot's chip probe, else this build's own. They differ when another
+ * board's version was installed (the 1.8's runs on every board): its own
+ * version is offered then, at any release, as long as the cable is not needed */
+const char *update_target_board(void) { const char *hw = board_port_hw(); return hw ? hw : PT_BOARD; }
+static bool crossgrade(void) { return strcmp(update_target_board(), PT_BOARD) != 0; }
+/* the save-format floor, in this build's packing: a manifest written before
+ * 0.3.8.1 packed three bytes (version.h), and 0x10000 is where four-byte
+ * numbers begin (0.1.0.0 would already be 0x00010000) */
+static uint32_t min_from_num(const update_manifest_t *m) { return m->min_from && m->min_from < 0x10000u ? m->min_from << 8 : m->min_from; }
 
 void update_tick(float dt) {
     if (s.step == STEP_NONE) return;
@@ -431,17 +598,26 @@ void update_tick(float dt) {
         if (st == NET_DONE) {
             if (!s.saved) { net_port_creds_set(s.ssid, s.pass); s.saved = true; }
             start_check();
-        } else if (st == NET_FAILED) fail(net_port_fail_reason());   /* the store is kept: routers refuse first tries, TYPE IT AGAIN replaces it */
+        } else if (st == NET_FAILED) {                               /* the store is kept: routers refuse first tries, TYPE IT AGAIN replaces it */
+            const int err = net_port_fail_reason();
+            if (s.saved && err == NET_ERR_NO_SIGNAL && net_port_creds_count() > 1) seek_next();   /* not in range: another saved one? */
+            else fail(err);
+        }
+        break;
+    case STEP_SEEKING:
+        st = net_port_scan_state();
+        if (st == NET_DONE) seek_pick();
+        else if (st == NET_FAILED) fail(net_port_fail_reason());
         break;
     case STEP_CHECKING: {
         const update_manifest_t *m = NULL;
         st = net_port_check_state(&m);
         if (st == NET_DONE && m) {
             s.m = *m; s.have_m = true;
-            if (strcmp(m->board, PT_BOARD) != 0)            /* another board's manifest (2026-10-02): never offered */
+            if (strcmp(m->board, update_target_board()) != 0)   /* another board's manifest (2026-10-02): never offered */
                 message("WRONG BOARD", "THIS UPDATE IS FOR", false, "ANOTHER BOARD. NOTHING CHANGED", NULL, 0, NULL, 0);
-            else if (!newer(m)) { message("UP TO DATE", "YOUR TANK HAS THE LATEST", false, "VERSION", NULL, 0, NULL, 0); s.step = STEP_UP_TO_DATE; }
-            else if (m->needs_cable || (m->min_from && m->min_from > (uint32_t)PT_RELEASE_NUM))
+            else if (!crossgrade() && !newer(m)) { message("UP TO DATE", "YOUR TANK HAS THE LATEST", false, "VERSION", NULL, 0, NULL, 0); s.step = STEP_UP_TO_DATE; }
+            else if (m->needs_cable || (min_from_num(m) && min_from_num(m) > (uint32_t)PT_RELEASE_NUM))
                 message("NEEDS THE CABLE", "THIS UPDATE IS INSTALLED", false, "FROM POCKETANK.COM/INSTALL", NULL, 0, NULL, 0);
             else go(STEP_OFFER, UPD_PG_OFFER);
         } else if (st == NET_FAILED) fail(net_port_fail_reason());
@@ -531,8 +707,14 @@ static void activate(int id) {
         else if (id >= HIT_ROW0 && id - HIT_ROW0 < s.n_aps) {
             const net_ap_t *ap = &s.aps[id - HIT_ROW0];
             bool same = !strcmp(s.ssid, ap->ssid);              /* back to the network already typed for: the text stays */
-            snprintf(s.ssid, sizeof s.ssid, "%s", ap->ssid); s.secured = ap->secured; s.saved = false;
-            if (ap->secured) type_password(!same); else { s.pass[0] = 0; start_connect(); }
+            snprintf(s.ssid, sizeof s.ssid, "%s", ap->ssid); s.secured = ap->secured; s.saved = false; s.fresh = !same;
+            /* THREE SAVED AND THIS IS A FOURTH (0.4.2): said before a letter is typed, with the name that goes - the
+               one used longest ago. OK goes on (it is replaced when the new one has joined, not before); OTHER
+               NETWORK is the list again; BACK TO TANK leaves all three (FORGET on the UPDATES page picks another) */
+            char victim[NET_SSID_MAX + 1];
+            if (net_port_creds_replaces(s.ssid, victim))
+                message("THREE NETWORKS SAVED", victim, true, "WILL BE FORGOTTEN TO MAKE ROOM", "OK", ACT_REPLACE_OK, "OTHER NETWORK", ACT_LIST);
+            else picked_go();
         }
         break; }
     case UPD_PG_PASSWORD: {
@@ -560,13 +742,21 @@ void update_touch(float x, float y, bool down) {
         s.down = down; return;
     }
     if (down) { s.lx = x; s.ly = y; }
-    if (down && !s.down) { s.px = x; s.py = y; s.hit = update_hit(x, y); }
+    if (down && !s.down) { s.px = x; s.py = y; s.hit = update_hit(x, y);
+                           if (s.page == UPD_PG_OFFER && s.hit == HIT_YES) { s.holding = true; s.hold_t0 = s.t; } }   /* (a press from before the
+                                                                   page came is no press here: go() forgot it - THE TOUCH RULE's G1) */
+    else if (down && s.page == UPD_PG_OFFER && s.hit == HIT_YES) {   /* UPDATE HELD (a press begun on it): it installs once the hold is
+                                                           full; slid off, the fill empties, and back on it starts again from empty */
+        if (update_hit(x, y) != HIT_YES) s.holding = false;
+        else if (!s.holding) { s.holding = true; s.hold_t0 = s.t; }
+        else if (s.t - s.hold_t0 >= UPD_HOLD_S) { s.holding = false; s.hit = HIT_NONE; start_install(); }
+    }
     else if (!down && s.down) {
         x = s.lx; y = s.ly;                              /* where the finger was, not where "nothing" is */
         int h = update_hit(x, y);
         float dx = x - s.px, dy = y - s.py;
-        if (h && h == s.hit && dx * dx + dy * dy < 30 * 30) activate(h);
-        s.hit = HIT_NONE;
+        if (h && h == s.hit && dx * dx + dy * dy < 30 * 30 && !(s.page == UPD_PG_OFFER && h == HIT_YES)) activate(h);   /* (UPDATE: its hold, not a tap) */
+        s.hit = HIT_NONE; s.holding = false;
     }
     s.down = down;
 }
@@ -579,7 +769,7 @@ static void signal_bars(uint16_t *fb, int stride, int x, int y, int rssi) {   /*
         render_rect(fb, stride, x + i * 7, y + 16 - h, 5, h, i < lit ? C_EDGE : C_DIM);
     }
 }
-static void spinner(uint16_t *fb, int stride, int cx, int cy, float clock) {
+static void spinner(uint16_t *fb, int stride, int cx, int cy, double clock) {
     int lit = (int)(clock * 8) & 7;
     static const int DX[8] = { 0, 13, 18, 13, 0, -13, -18, -13 }, DY[8] = { -18, -13, 0, 13, 18, 13, 0, -13 };
     for (int i = 0; i < 8; i++) render_rect(fb, stride, cx + DX[i] - 3, cy + DY[i] - 3, 6, 6, i == lit ? C_EDGE : (i + 7) % 8 == lit ? 0x5a8a94 : C_DIM);
@@ -595,21 +785,18 @@ static void wrap2(const char *src, char *l1, char *l2, size_t cap) {   /* two li
     snprintf(l2, cap, "%s", rest);
     if (strlen(rest) > lim) { l2[lim - 3] = '.'; l2[lim - 2] = '.'; l2[lim - 1] = '.'; l2[lim] = 0; }
 }
-void render_clock_sync(uint16_t *fb, int stride, float clock) {
-    page_bg(fb, stride);
-    text_c(fb, stride, 120, 3, C_TEXT, "WAKING UP");
-    text_c(fb, stride, 158, 2, C_CAPT, "CHECKING THE TIME");
-    spinner(fb, stride, CX, 224, clock);
+void render_clock_sync(uint16_t *fb, int stride, double clock) {   /* the loading screen's look (10-31): the tank's WAKING THE TANK follows on the same water */
+    render_loading(fb, stride, "WAKING UP", clock, "CHECKING THE TIME");
 }
-void render_update(uint16_t *fb, int stride, float clock) {
+void render_update(uint16_t *fb, int stride, double clock) {
     page_bg(fb, stride);
     char line[80];
     switch (s.page) {
     case UPD_PG_POWER:
-        text_c(fb, stride, 96, 3, C_TEXT, "PLUG IN TO UPDATE");
+        text_c(fb, stride, 96, 3, C_TEXT, update_power_title());
         snprintf(line, sizeof line, "THE BATTERY IS AT %d%%", s.battery_pct);
         text_c(fb, stride, 150, 2, C_CAPT, line);
-        text_c(fb, stride, 176, 2, C_DIM, "AN UPDATE NEEDS THE CABLE IN");
+        text_c(fb, stride, 176, 2, C_QUIET, update_power_line());
         render_button(fb, stride, UPD_BTN_MID_X, UPD_BTN_Y, UPD_BTN_W, UPD_BTN_H, C_INNER, C_EDGE, "BACK TO TANK", 2);
         break;
     case UPD_PG_BUSY:
@@ -624,7 +811,7 @@ void render_update(uint16_t *fb, int stride, float clock) {
             render_rect(fb, stride, BX + 2, BY + 2, (BW - 4) * s.percent / 100, BH - 4, C_EDGE);
             snprintf(line, sizeof line, "%d%%", s.percent); text_c(fb, stride, BY + 26, 2, C_TEXT, line);
             if (s.step == STEP_RESTART) text_c(fb, stride, 252, 2, C_CAPT, "RESTARTING");
-            else text_c(fb, stride, 252, 2, C_DIM, "KEEP THE TANK ON");
+            else text_c(fb, stride, 252, 2, C_QUIET, "KEEP THE TANK ON");
         } else spinner(fb, stride, CX, 214, clock);
         if (s.step != STEP_RESTART) render_button(fb, stride, UPD_BTN_MID_X, UPD_BTN_Y, UPD_BTN_W, UPD_BTN_H, C_INNER, C_EDGE, "CANCEL", 2);
         break;
@@ -638,7 +825,7 @@ void render_update(uint16_t *fb, int stride, float clock) {
             render_rect_edge(fb, stride, UX, y, UW - (pages > 1 ? 36 : 0), UPD_ROW_H - 4, C_INNER);
             update_text(fb, stride, UX + 12, y + (UPD_ROW_H - 4 - 14) / 2, 2, C_TEXT, s.aps[i].ssid);
             signal_bars(fb, stride, UX + UW - (pages > 1 ? 36 : 0) - 44, y + 8, s.aps[i].rssi);
-            if (!s.aps[i].secured) render_text(fb, stride, UX + UW - (pages > 1 ? 36 : 0) - 44 - 8 - render_text_w("OPEN", 1), y + 12, 1, C_DIM, "OPEN");
+            if (!s.aps[i].secured) render_text(fb, stride, UX + UW - (pages > 1 ? 36 : 0) - 44 - 8 - render_text_w("OPEN", 1), y + 12, 1, C_QUIET, "OPEN");
         }
         if (pages > 1) {                                       /* chevrons and pips on the right */
             int cx = UPD_ARROW_X + 4;
@@ -656,19 +843,33 @@ void render_update(uint16_t *fb, int stride, float clock) {
         draw_keyboard(fb, stride);
         break;
     case UPD_PG_OFFER: {
-        text_c(fb, stride, 52, 3, C_TEXT, "UPDATE READY");
+        const char *own = crossgrade() ? pt_board_words(update_target_board()) : NULL;   /* this board's own version (0.3.9.3) */
+        if (own) snprintf(line, sizeof line, "%s VERSION", own);
+        text_c(fb, stride, 52, 3, C_TEXT, own ? line : "UPDATE READY");
         uint32_t bytes = s.m.app_size + (s.m.model_offered ? s.m.model_size : 0);
         snprintf(line, sizeof line, "VERSION %s %s, %.1f MB", s.m.release, PT_RELEASE_STAGE, bytes / 1048576.0);
         text_c(fb, stride, 92, 2, C_CAPT, line);
-        char l1[32], l2[32]; wrap2(s.m.note, l1, l2, sizeof l1);
+        char l1[32], l2[32];
+        if (own) { snprintf(l1, sizeof l1, "MADE FOR THIS BOARD"); snprintf(l2, sizeof l2, "YOUR FISH STAY"); }
+        else wrap2(s.m.note, l1, l2, sizeof l1);
         text_c(fb, stride, 138, 2, C_TEXT, l1);
         if (l2[0]) text_c(fb, stride, 160, 2, C_TEXT, l2);
         int secs = (int)(bytes / 120000) + 10;
         if (secs < 90) snprintf(line, sizeof line, "IT TAKES ABOUT A MINUTE");
         else snprintf(line, sizeof line, "IT TAKES ABOUT %d MINUTES", (secs + 30) / 60);
-        text_c(fb, stride, 208, 2, C_DIM, line);
-        text_c(fb, stride, 230, 2, C_DIM, "THE TANK RESTARTS BY ITSELF");
-        render_button(fb, stride, UPD_BTN_L_X, UPD_BTN_Y, UPD_BTN_W, UPD_BTN_H, C_GO, C_GO_E, "UPDATE", 2);
+        text_c(fb, stride, 208, 2, C_QUIET, line);
+        text_c(fb, stride, 230, 2, C_QUIET, "THE TANK RESTARTS BY ITSELF");
+        {   /* HOLD TO UPDATE (Strato 11-06): the fill grows across the button as the finger stays, as REMOVE's HOLD TO SELL */
+            const char *lb = "HOLD TO UPDATE";
+            float f = s.holding ? (s.t - s.hold_t0) / UPD_HOLD_S : 0; if (f > 1) f = 1;
+            render_rect(fb, stride, UPD_BTN_L_X, UPD_BTN_Y, UPD_BTN_W, UPD_BTN_H, C_GO);
+            if (f > 0) render_rect(fb, stride, UPD_BTN_L_X, UPD_BTN_Y, (int)(UPD_BTN_W * f), UPD_BTN_H, C_FILL);
+            render_rect_edge(fb, stride, UPD_BTN_L_X, UPD_BTN_Y, UPD_BTN_W, UPD_BTN_H, C_GO_E);
+            if (PAGE_BOWL) {                                 /* (the bowl's button is narrower: two lines, Strato 11-06) */
+                render_text(fb, stride, UPD_BTN_L_X + (UPD_BTN_W - render_text_w("HOLD TO", 2)) / 2, UPD_BTN_Y + 3, 2, C_TEXT, "HOLD TO");
+                render_text(fb, stride, UPD_BTN_L_X + (UPD_BTN_W - render_text_w("UPDATE", 2)) / 2, UPD_BTN_Y + UPD_BTN_H - 17, 2, C_TEXT, "UPDATE");
+            } else render_text(fb, stride, UPD_BTN_L_X + (UPD_BTN_W - render_text_w(lb, 2)) / 2, UPD_BTN_Y + (UPD_BTN_H - 14) / 2, 2, C_TEXT, lb);
+        }
         render_button(fb, stride, UPD_BTN_R_X, UPD_BTN_Y, UPD_BTN_W, UPD_BTN_H, C_INNER, C_EDGE, "NOT NOW", 2);
         break; }
     case UPD_PG_CALIB: {
@@ -681,13 +882,13 @@ void render_update(uint16_t *fb, int stride, float clock) {
         text_c(fb, stride, ty < PAGE_H / 2 ? PAGE_H - 60 : 46, 2, C_CAPT, line);
         break; }
     case UPD_PG_MESSAGE: {
-        text_c(fb, stride, 84, 3, C_TEXT, s.title);
-        if (s.line1_ascii) atext_c(fb, stride, 130, 2, C_CAPT, s.line1); else text_c(fb, stride, 130, 2, C_CAPT, s.line1);
-        if (s.line2[0]) text_c(fb, stride, 152, 2, C_CAPT, s.line2);
+        text_c(fb, stride, 96, 3, C_TEXT, s.title);                    /* (0.4.2: the busy pages' title line - it stood 12 px higher - and their first line's) */
+        if (s.line1_ascii) atext_c(fb, stride, 134, 2, C_CAPT, s.line1); else text_c(fb, stride, 134, 2, C_CAPT, s.line1);
+        if (s.line2[0]) text_c(fb, stride, 156, 2, C_CAPT, s.line2);
         if (s.step == STEP_UP_TO_DATE) {
-            snprintf(line, sizeof line, "VERSION %s %s", PT_RELEASE, PT_RELEASE_STAGE); text_c(fb, stride, 186, 2, C_DIM, line);
+            snprintf(line, sizeof line, "VERSION %s %s", PT_RELEASE, PT_RELEASE_STAGE); text_c(fb, stride, 190, 2, C_QUIET, line);
             float left = 1.0f - s.t / UPD_UP_TO_DATE_S; if (left < 0) left = 0;
-            render_rect(fb, stride, UX, 220, (int)(UW * left), 2, C_INNER);
+            render_rect(fb, stride, UX, 224, (int)(UW * left), 2, C_INNER);
         }
         int by = s.primary ? UPD_BTN_Y - 50 : UPD_BTN_Y;
         if (s.primary)   render_button(fb, stride, primary_x(), by, UPD_BTN_W, UPD_BTN_H, C_GO, C_GO_E, s.primary, 2);

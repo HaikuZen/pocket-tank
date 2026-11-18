@@ -83,6 +83,28 @@ void display_port_set_view(int view) { (void)view; }
 int  display_port_view(void) { return DISPLAY_VIEW_FULL; }
 void display_port_panel_to_tank(int px, int py, float *tx, float *ty) { *tx = (float)px; *ty = (float)py; }
 void display_port_set_inverted(bool inverted) { s_inverted = inverted; }
+void display_port_set_quarter(int q) { s_inverted = (q & 2) != 0; }   /* a landscape panel: no sides, the flip only */
+bool display_port_quarters(void) { return false; }
+/* main's other ports' extras (0.4.x): nothing of the kind on this board - the stub's answers */
+void display_port_side_tune(int madctl, int gx, int gy) { (void)madctl; (void)gx; (void)gy; }
+void display_port_side_info(int *madctl, int *gx, int *gy, bool *on) { *madctl = 0; *gx = *gy = 0; *on = false; }
+void display_port_probe(bool on) { (void)on; }
+void display_port_set_madctl(uint8_t v) { (void)v; }
+uint8_t display_port_madctl(void) { return 0; }
+bool display_port_panel_power_check(void) { return false; }
+uint32_t display_port_panel_heals(void) { return 0; }
+void display_port_panel_rail_test_off(void) {}
+/* no flush task: a flush of one of the panel's own buffers is a switch (display_port_flush), and a buffer is free to
+   write once the refill has left it (display_port_direct_wait) - flush_wait means that */
+bool display_port_flush_async(const uint16_t *fb, void (*done)(const uint16_t *, void *), void *arg) { (void)fb; (void)done; (void)arg; return false; }
+void display_port_flush_wait(const uint16_t *fb) { if (fb) display_port_direct_wait(fb); }
+void display_port_flush_async_prof(int64_t *task_us, int *frames, int64_t *copy_us) { *task_us = 0; *frames = 0; *copy_us = 0; }
+bool board_is_175(void) { return false; }
+bool board_is_square(void) { return false; }
+uint8_t board_es7210_addr(void) { return 0; }
+bool board_port_probed(void) { return true; }
+const char *board_port_hw(void) { return NULL; }   /* its own build: no chips to tell it by (update_target_board falls back to PT_BOARD) */
+void board_sd_select(bool on) { (void)on; }
 void display_port_flush_prof(int64_t *wait_us, int64_t *send_us) {
     *wait_us = s_prof_wait; *send_us = s_prof_send; s_prof_wait = s_prof_send = 0;
 }

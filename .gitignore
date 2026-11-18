@@ -3,7 +3,7 @@ model/out/*
 !model/out/.gitkeep
 __pycache__/
 .DS_Store
-sim/lvgl/
+sim/lvgl
 sim/build/
 sim/fishsim
 model/runw
@@ -41,3 +41,6 @@ sim/sheets/
 
 # this bench's boards (USB serials) for flash_round.sh / flash_watch.sh
 tools/boards.local.sh
+sim/build-square/
+sim/fishsim-square
+sim/build-arm*/

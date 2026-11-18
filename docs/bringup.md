@@ -29,8 +29,12 @@ Work top to bottom; each step has a pass signal.
    the mapping there (two lines), not the renderer.
 7. **Touch mapping:** same rotation in `touch_port_ft3168.c`; tap a corner and
    watch the log, adjust if mirrored.
-8. **RTC:** first boot seeds the PCF85063 from build time; later boots read it.
-   Power off ≥1 h, power on → fish ravenous until fed (the progression rule).
+8. **RTC:** a PCF85063 that stopped (first power-up; no cell and the cable
+   out) leaves the clock unset: the internet sets it at boot with a saved
+   network, else the save's stamp (or build time on a fresh tank), and the
+   clock is written back into the chip (0.3.9; before that, build time went
+   in and a power cut lost the night). Power off ≥1 h, power on → fish
+   ravenous until fed (the progression rule).
 9. **Measure** (the numbers the video wants): decision latency and tok/s from
    the `advisor:` log lines; render fps from `display:`; heap from the 10 s
    status line. Compare with QEMU (~2.3 s, ~19 tok/s) and docs/memory_budget.md.

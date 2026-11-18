@@ -33,7 +33,7 @@ Any of these is fine as a source; the build tool converts them:
   every cue and stores a per-cue playback gain in the manifest
   (`assets/sounds/gains.csv`, seeded from the levels of the first export
   batch), so relative loudness is tuned in one text file without re-export.
-  The device applies volume and night attenuation on top.
+  The device applies volume on top.
 - **Nothing below ~600 Hz counts.** The speaker cannot reproduce it, but it
   still eats headroom and amp power. The tool high-passes at 600 Hz; a cue
   whose energy is mostly down there comes out faint and thin on the device.
@@ -115,7 +115,7 @@ Tiers are build order. Tier 1 alone is a shippable feature.
 |---|---|---|
 | `eat` | a fish takes a pellet | 2-4 variants, max one per 250 ms, pitch by stage (fry high, elder low) |
 | `spook` | 3-tap aggression fires, fish flee | once per spook episode, not per tap |
-| `investigate` | a long hold draws a fish over (trust earned) | gentle, once per hold |
+| `investigate` | a long hold draws a fish over (trust earned) | gentle, once per hold, for the first fish that comes all the way in; pitch by THAT fish's stage like `eat` (fry high, elder low), so keepers hear different chimes from hold to hold |
 | `bubbles` | a fish reaches the column for play (`GOAL_VISIT_BUBBLES` arrival) | DEFERRED by Strato 2026-09-15 after the first listen: fish visit the column too often for a cue to mean anything. The event still fires; the id stays |
 | `beg` | a hungry fish begging at the glass | DEFERRED by Strato 2026-09-15; if it comes back: very quiet, cooldown 30 s per fish, never at night |
 
@@ -131,6 +131,7 @@ Tiers are build order. Tier 1 alone is a shippable feature.
 | `coin` | sand dollars earned (the "+N" toast, render_sd_toast) | not yet: no cue in the bank; the toast is silent. A purchase plays `confirm` |
 | `low_battery` | gauge falls to 10% | once per discharge, with the low-battery modal and the persistent pill (section 4a) |
 | `error` | save failed, reset prompt | |
+| `crab_find` | the strawberry crab's dig comes up with a sand dollar (TEV_CRAB_FIND, 0.3.9.1) | Strato's pick 2026-10-25: working-assets/sounds/achievement-money_edit.wav (`make_sounds.py add`); the keeper's cue to look, since the find waits only 3 minutes in its claw |
 
 Not in scope: music, ambient loops, a per-decision sound (the LLM decides
 every ~4 s per fish; that would be constant noise), any sound in drowse.
@@ -187,6 +188,20 @@ void audio_port_sleep(void);                          // amp low, codec down, AL
   `tools/make_sounds.py` from `assets/sounds/` and `gains.csv`. Embedded with `EMBED_FILES`
   next to `tokenizer.bin`; it lives in flash-mapped `.rodata`, so no RAM.
   The manifest is shared with the sim.
+- **Compressed since 0.4.1 (2026-11-04):** the bank is IMA ADPCM, 4 bits a
+  sample, 580 -> 170 KB. rc-0.4 filled 95% of the 2.5 MB app slot; this gave
+  back 384 KB (80% full). Each clip is 256-sample blocks of 132 bytes (the
+  first sample exact as s16, the step index, a pad byte, 255 nibbles low
+  first), so every block restarts exactly and a loop seam never drifts. The
+  mixer decodes forward as a voice plays (a few bytes of state per voice, no
+  buffer); `tools/make_sounds.py` encodes with a harder search (the best
+  starting step per block, a one-sample lookahead) but the decoder is the
+  standard one. **`PCM_CUES` stay s16**: `investigate` (Strato by ear,
+  2026-11-04: the only one that "sounded considerably worse"; a soft
+  two-note tone with a long quiet fade, where ADPCM's hiss has nothing to
+  hide under). A new cue that sounds rough compressed joins `PCM_CUES`.
+  `firmware/host_test/audio_host.c` checks every clip decodes, sample for
+  sample, to the tool's own decode (`SND_CLIPS[].check`).
 - **Player task:** core 1 (the LLM core; the advisor runs at priority 5 and
   is bandwidth-bound, not latency-bound), priority 6, small stack. Wakes on
   an event or a DMA half-empty callback. Software mixer: up to 3 voices,
@@ -216,13 +231,20 @@ void audio_port_sleep(void);                          // amp low, codec down, AL
   user guide covers the soft-ramp bits) stays on.
 - **Rate limits:** per-id cooldown from the tables above, plus a global cap
   of 6 cues per second (excess dropped, never queued late).
-- **Night:** when the tank light is off, Tier 2 cues are muted and Tier 1
-  cues play at -12 dB. Drowse/sleep: nothing, and `audio_port_sleep()` runs
-  before the sleep call.
+- **Light off:** no change - a dark tank sounds like a lit one (0.3.7).
+  Until then Tier 2 cues were muted and Tier 1 played at -12 dB, a rule from
+  the idle day/night cycle that outlived it: since the double-tap the light
+  is the keeper's choice while watching (Strato 2026-10-18: eating and the
+  hold-approach went silent). Drowse/sleep: nothing, and `audio_port_sleep()`
+  runs before the sleep call.
 - **Volume:** three levels, saved in NVS (`tank/snd`). Default: normal.
   Set on the settings page (render_settings; the milestones page's SETTINGS
   button opens it), by the director (`snd off|quiet|normal`), or the sim's
-  V key. Picking QUIET or NORMAL plays the confirm cue at that level. Director: `snd <id>`, `snd off`,
+  V key. Picking QUIET or NORMAL plays the confirm cue at that level.
+  **Muted (volume 0) = the port stays down** (0.4, a keeper's hiss report): `audio_port_prewarm` (touch, IMU motion)
+  does nothing at volume 0, and setting the volume to 0 sends an up port down at once (amp low, I2S off, codec
+  down, ALDO1 off on the 1.8; ALDO1 stays pinned on the boards with an ES7210). Raising it from 0 warms the port,
+  so the first tick plays ~255 ms late, once. Director: `snd <id>`, `snd off`,
   `snd list` for b-roll; the existing `codec` dump stays.
 - **Sim parity:** `sim/` gets the same `audio_port.h` on SDL2 audio
   (`SDL_QueueAudio`, 16 kHz s16). Same bank, same mixer code in `common/`

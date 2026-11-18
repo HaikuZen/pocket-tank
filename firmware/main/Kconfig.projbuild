@@ -26,10 +26,19 @@ menu "pocket-tank"
             watch, on its side and centred in the glass. Build it with
             SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.watch" into its
             own build directory and sdkconfig (docs/board-amoled-2.06-watch.md).
+    config POCKET_TANK_SQUARE
+        bool "The SQUARE build: a 480x480 tank for the Waveshare ESP32-S3-Touch-AMOLED-2.16"
+        default n
+        depends on !POCKET_TANK_ROUND && !POCKET_TANK_WATCH
+        help
+            On = TANK_SQUARE: the tank fills the 2.16's square glass; that
+            image shows nothing on the other boards. Build it with
+            SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.square" into its
+            own build directory and sdkconfig (docs/board-amoled-2.16.md).
     config POCKET_TANK_FNK0115
         bool "The FNK0115 build: an 800x480 tank for the Freenove FNK0115 (IPS: 4.3in L / 5.0in Q)"
         default n
-        depends on !POCKET_TANK_ROUND && !POCKET_TANK_WATCH
+        depends on !POCKET_TANK_ROUND && !POCKET_TANK_WATCH && !POCKET_TANK_SQUARE
         help
             On = TANK_WIDE: an 800x480 landscape tank on the board's RGB
             panel (display_port_rgb.c), GT911 touch, the director on UART0
@@ -42,7 +51,7 @@ menu "pocket-tank"
     config POCKET_TANK_CROWP4
         bool "The CrowPanel P4 build: a 1024x600 tank for the Elecrow CrowPanel Advanced 7in / 10.1in (ESP32-P4)"
         default n
-        depends on IDF_TARGET_ESP32P4 && !POCKET_TANK_ROUND && !POCKET_TANK_WATCH && !POCKET_TANK_FNK0115
+        depends on IDF_TARGET_ESP32P4 && !POCKET_TANK_ROUND && !POCKET_TANK_WATCH && !POCKET_TANK_FNK0115 && !POCKET_TANK_SQUARE
         help
             On = TANK_WIDE + TANK_WIDE_1024: a 1024x600 landscape tank on the
             board's EK79007 MIPI-DSI panel (display_port_dsi.c), GT911 touch,

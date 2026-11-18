@@ -1,5 +1,6 @@
 /* update_mode.c - see update_mode.h */
 #include "update_mode.h"
+#include "update_req.h"
 #include <string.h>
 #include "update.h"
 #include "tank.h"
@@ -9,6 +10,7 @@
 #include "brightness.h"
 #include "battery.h"
 #include "director.h"
+#include "imu_port.h"
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -19,22 +21,22 @@
 #include "freertos/task.h"
 
 static const char *TAG = "update";
-#define REQ_MAGIC 0x4f54417au              /* "OTAz" */
-RTC_NOINIT_ATTR static uint32_t s_req, s_req_check;
+RTC_NOINIT_ATTR static uint32_t s_req, s_req_check;   /* the request's two words (update_req.h: the host tests them) */
+static bool s_add;                         /* this boot's request was ADD A NETWORK (0.4.2) */
 
-void update_mode_request(void) {
-    s_req = REQ_MAGIC; s_req_check = ~REQ_MAGIC;
-    ESP_LOGI(TAG, "restarting into update mode");
+void update_mode_request(bool add) {
+    update_req_write(&s_req, &s_req_check, add);
+    ESP_LOGI(TAG, "restarting into update mode%s", add ? " (add a network)" : "");
     vTaskDelay(pdMS_TO_TICKS(150));        /* the log line out the door */
     esp_restart();
 }
 bool update_mode_pending(void) {
-    bool yes = s_req == REQ_MAGIC && s_req_check == ~REQ_MAGIC;
-    s_req = 0; s_req_check = 0;            /* one boot only, whatever happens next */
-    return yes;
+    return update_req_take(&s_req, &s_req_check, &s_add);   /* (one boot only; s_add is this boot's alone) */
 }
 
-void update_mode_run(uint16_t *fb) {
+static int s_way = -1;                     /* director `ota flip`: held, -1 = the IMU's */
+void update_mode_hold_way(int q) { s_way = q; }
+void update_mode_run(uint16_t *fb, int way_up) {
     const esp_partition_t *run = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "update mode: running from %s | internal heap %u KB, psram %u KB free (the measurement docs/OTA.md waits for)",
              run ? run->label : "?", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024, (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
@@ -43,12 +45,15 @@ void update_mode_run(uint16_t *fb) {
     bool on_power = pct >= 0 && BAT_ON_POWER(battery_port_state());
     ESP_LOGI(TAG, "battery %d%%, %s", pct, on_power ? "on the cable" : "on battery");
     director_init();                       /* the console, for the hands-free test channel (main.c's later call is a no-op) */
-    update_begin(pct, on_power);
+    if (s_add) update_begin_add(pct, on_power); else update_begin(pct, on_power);
     int64_t last = esp_timer_get_time(), t0 = last, last_log = last;
     int last_page = -1;
     while (!update_outcome()) {
         int64_t now = esp_timer_get_time();
         float dt = (now - last) / 1e6f; last = now; if (dt > 0.25f) dt = 0.25f;
+        imu_port_poll(now);                /* the pages turn with the tank, as the tank does (unless it was held) */
+        { int q = s_way >= 0 ? s_way : (way_up & UPD_WAY_FIXED) ? (way_up & 3) : imu_port_quarter();
+          display_port_set_quarter(q); touch_port_set_quarter(q); }
         float x = 0, y = 0; bool down = touch_port_read_raw(&x, &y);
         { static bool was;
           if (down && !was) {
